@@ -6,6 +6,8 @@ extern crate chrono;
 
 extern crate reqwest;
 
+mod tweet;
+
 use std::fs::File;
 use std::io::{Read, BufReader, BufRead};
 use std::str;
@@ -17,8 +19,7 @@ use std::thread;
 use reqwest::header::{Accept, AcceptEncoding, Connection, qitem, Encoding};
 use reqwest::Client;
 
-use chrono::{DateTime as ChronoDateTime, Utc};
-pub type DateTime = ChronoDateTime<Utc>;
+use tweet::Tweet;
 
 #[derive(Deserialize)]
 struct Credential {
@@ -113,7 +114,7 @@ fn main() {
     let start = Instant::now();
 
     while let Ok(string) = streamer.recv.recv() {
-        match serde_json::from_str::<TweetSummary>(&string) {
+        match serde_json::from_str::<Tweet>(&string) {
             Ok(t) => println!("{}: {}", t.lang, t.text),
             Err(e) => println!("ERROR {:?}\n{}", e, string),
         }
@@ -148,66 +149,9 @@ impl <'a, R>Iterator for JsonStreamer<'a, R> where R: BufRead + 'a {
         String::from_utf8(buf).ok()
     }
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TweetSummary {
-    #[serde(rename = "body")]
-    pub text: String,
-    #[serde(rename = "twitter_lang")]
-    pub lang: String,
-    pub link: String,
-    #[serde(rename = "postedTime")]
-    pub posted_time: DateTime,
-    #[serde(rename = "actor")]
-    pub user: User,
-    #[serde(rename = "twitter_entities")]
-    pub entities: Entities,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Entities {
-    pub hashtags: Vec<Hashtag>,
-    pub urls: Vec<Url>,
-    pub user_mentions: Vec<UserMention>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct User {
-    pub id: String,
-    pub link: String,
-    pub display_name: String,
-    pub image: String,
-    pub preferred_username: String,
-    pub verified: bool,
-    pub followers_count: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Hashtag {
-    pub text: String,
-    pub indices: (u64, u64)
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Url {
-    pub url: String,
-    pub expanded_url: String,
-    pub indices: (u64, u64),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserMention {
-    pub screen_name: String,
-    pub name: String,
-    pub id: u64,
-    pub id_str: String,
-    pub indices: (u64, u64),
-}
-
 #[allow(dead_code)]
 mod filters {
-    use super::TweetSummary as Tweet;
+    use super::Tweet;
 
     type Filter = fn(&Tweet) -> bool;
 
