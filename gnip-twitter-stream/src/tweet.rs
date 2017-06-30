@@ -1,4 +1,3 @@
-
 use chrono::{DateTime as ChronoDateTime, Utc};
 pub type DateTime = ChronoDateTime<Utc>;
 
@@ -57,5 +56,3 @@ pub struct UserMention {
     pub id_str: Option<String>,
     pub indices: (u64, u64),
 }
-
-
