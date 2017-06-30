@@ -52,9 +52,9 @@ pub struct Url {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserMention {
     pub screen_name: String,
-    pub name: String,
-    pub id: u64,
-    pub id_str: String,
+    pub name: Option<String>,
+    pub id: Option<u64>,
+    pub id_str: Option<String>,
     pub indices: (u64, u64),
 }
 
