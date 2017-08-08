@@ -4,7 +4,7 @@ extern crate serde_json;
 
 use std::env;
 use std::time::Instant;
-use gnip_twitter_stream::{load_cred, Tweet, GnipStream};
+use gnip_twitter_stream::{load_cred, GnipStream};
 use manga_rs::{filter_all, write_saved};
 
 fn main() {
@@ -13,6 +13,8 @@ fn main() {
         Err(e) => panic!("error loading credential {:?}", e),
     };
 
+    let _ = env::var("TWITTER_SAVE_DIR").expect("expected $TWITTER_SAVE_DIR");
+
     let cred = load_cred(&cred_path);
     let url = "https://gnip-stream.twitter.com/stream/sample10/accounts/anagramatron/publishers/twitter/prod.json";
     let mut streamer = GnipStream::new(url, 2);
@@ -20,16 +22,22 @@ fn main() {
 
     let mut count = 0usize;
     let mut filt_count = 0usize;
+    let mut last_print = 0usize;
     let start = Instant::now();
 
     let mut to_save = Vec::new();
 
-    while let Some(Ok(string)) = streamer.next() {
-        count += 1;
-        let tweet = match serde_json::from_str::<Tweet>(&string) {
+    loop {
+        let stream_result = streamer.next().expect("stream connection closed");
+        let tweet = match stream_result {
             Ok(t) => t,
-            Err(e) => { println!("ERROR {:?}\n{}", e, string); continue },
+            Err(e) => {
+                eprintln!("stream returned error\n{:?}", e);
+                continue
+            }
         };
+
+        count += 1;
 
         if filter_all(&tweet) {
             filt_count += 1;
@@ -37,12 +45,13 @@ fn main() {
         }
 
         if to_save.len() == 25000 {
-            write_saved(&to_save, false);
+            write_saved(&to_save, true);
             to_save = Vec::new();
         }
 
-        if to_save.len() % 100 == 0 && count > 0 {
-            let elapsed = start.elapsed().as_secs() as usize;
+        let elapsed = start.elapsed().as_secs() as usize;
+        if filt_count % 1000 == 0 && filt_count != last_print && count > 0 && elapsed > 0 {
+            last_print = filt_count;
             let tps = count / elapsed;
             let passed = (filt_count as f64 / count as f64) * 100 as f64;
             println!("count: {}/{} ({:.2}%) secs {} ({} tps)",

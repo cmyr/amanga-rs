@@ -8,7 +8,7 @@ use std::str;
 use std::env;
 use std::time::Instant;
 
-use gnip_twitter_stream::{load_cred, Tweet, GnipStream};
+use gnip_twitter_stream::{load_cred, GnipStream};
 use manga_rs::{AnagramFinder, filter_all};
 
 fn main() {
@@ -25,18 +25,14 @@ fn main() {
 
     let mut count = 0usize;
     let mut filt_count = 0usize;
+    let mut last_print = 0usize;
     let start = Instant::now();
     let mut finder = AnagramFinder::new();
 
-    while let Some(string) = streamer.next() {
-        let string = match string {
+    while let Some(stream_result) = streamer.next() {
+        let tweet = match stream_result {
             Ok(s) => s,
             Err(e) => { println!("error in stream {:?})", e); return },
-        };
-
-        let tweet = match serde_json::from_str::<Tweet>(&string) {
-            Ok(t) => t,
-            Err(e) => { println!("ERROR {:?}\n{}", e, string); continue },
         };
 
         count += 1;
@@ -47,7 +43,8 @@ fn main() {
         }
 
         let elapsed = start.elapsed().as_secs() as usize;
-        if elapsed % 60 == 0 && elapsed > 0 {
+        if filt_count % 100 == 0 && filt_count != last_print && count > 0 && elapsed > 0 {
+            last_print = filt_count;
             let tps = count / elapsed;
             let passed = (filt_count as f64 / count as f64) * 100 as f64;
             println!("count: {}/{} ({:.2}%) secs {} ({} tps)",

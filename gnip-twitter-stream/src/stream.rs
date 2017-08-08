@@ -5,21 +5,23 @@ use std::sync::mpsc;
 use std::thread;
 
 use reqwest::header::{Accept, AcceptEncoding, Connection, qitem, Encoding};
-use reqwest::{Client, Response, StatusCode, Error as reqError};
+use reqwest::{Client, Response, StatusCode, Error as ReqError};
+use serde_json::{self, Error as JsonError};
 
 use super::Credential;
+use tweet::Tweet;
 
 #[derive(Debug)]
 pub enum StreamError {
     Io(io::Error),
     Utf8(FromUtf8Error),
-    Http(reqError),
+    Http(ReqError),
     Disconnect,
     UnexpectedStatus(StatusCode),
-
+    Json(JsonError),
 }
 
-pub type StreamResult = Result<String, StreamError>;
+pub type StreamResult = Result<Tweet, StreamError>;
 
 impl From<io::Error> for StreamError {
     fn from(error: io::Error) -> StreamError {
@@ -33,9 +35,15 @@ impl From<FromUtf8Error> for StreamError {
     }
 }
 
-impl From<reqError> for StreamError {
-    fn from(error: reqError) -> StreamError {
+impl From<ReqError> for StreamError {
+    fn from(error: ReqError) -> StreamError {
         StreamError::Http(error)
+    }
+}
+
+impl From<JsonError> for StreamError {
+    fn from(error: JsonError) -> StreamError {
+        StreamError::Json(error)
     }
 }
 
@@ -61,7 +69,7 @@ impl<'a> GnipStream<'a> {
         }
     }
 
-    fn connect_stream(&self, cred: &Credential, url: &str) -> Result<Response, reqError> {
+    fn connect_stream(&self, cred: &Credential, url: &str) -> Result<Response, ReqError> {
         eprintln!("connecting to url {}", url);
         let client = Client::new().unwrap();
         client.get(url)
@@ -116,7 +124,8 @@ fn next_in_stream<R: BufRead>(stream: &mut R) -> StreamResult {
     if read_bytes == 0 {
         Err(StreamError::Disconnect)
     } else {
-        Ok(String::from_utf8(buf)?)
+       let msg = String::from_utf8(buf)?;
+       Ok(serde_json::from_str(&msg)?)
     }
 }
 

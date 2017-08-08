@@ -70,7 +70,7 @@ pub fn test_distance(s1: &str, s2: &str) -> bool {
     let s1 = word_split_sort(s1);
     let s2 = word_split_sort(s2);
     //assert_eq!(s1.len(), s2.len(), "{} / {}", s1, s2);
-    let dist = edit_distance(&s1, &2);
+    let dist = edit_distance(&s1, &s2);
     (dist as f64) / (s2.chars().count() as f64) > MIN_DIST
 }
 
