@@ -1,9 +1,12 @@
 extern crate gnip_twitter_stream;
 extern crate manga_rs;
 extern crate serde_json;
+extern crate chrono;
 
 use std::env;
 use std::time::Instant;
+use chrono::{Local, DateTime};
+
 use gnip_twitter_stream::{load_cred, GnipStream};
 use manga_rs::{filter_all, write_saved};
 
@@ -17,8 +20,8 @@ fn main() {
 
     let cred = load_cred(&cred_path);
     let url = "https://gnip-stream.twitter.com/stream/sample10/accounts/anagramatron/publishers/twitter/prod.json";
-    let mut streamer = GnipStream::new(url, 2);
-    streamer.run(&cred).expect("failed to start stream");
+    let mut streamer = GnipStream::new(url, &cred, 2);
+    streamer.run().expect("failed to start stream");
 
     let mut count = 0usize;
     let mut filt_count = 0usize;
@@ -44,7 +47,9 @@ fn main() {
             to_save.push(tweet);
         }
 
+        let now: DateTime<Local> = Local::now();
         if to_save.len() == 25000 {
+            println!("{}: saving batch", now.format("%b %d, %H:%M:%S"));
             write_saved(&to_save, true);
             to_save = Vec::new();
         }
