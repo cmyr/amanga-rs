@@ -10,6 +10,8 @@ use chrono::{Local, DateTime};
 use gnip_twitter_stream::{load_cred, GnipStream};
 use manga_rs::{filter_all, write_saved};
 
+static SAVE_LENGTH: usize = 25000;
+
 fn main() {
     let cred_path = match env::var("TWITTER_CRED_PATH") {
         Ok(p) => p,
@@ -26,6 +28,7 @@ fn main() {
     let mut count = 0usize;
     let mut filt_count = 0usize;
     let mut last_print = 0usize;
+    let mut last_save = Instant::now();
     let start = Instant::now();
 
     let mut to_save = Vec::new();
@@ -48,10 +51,13 @@ fn main() {
         }
 
         let now: DateTime<Local> = Local::now();
-        if to_save.len() == 25000 {
-            println!("{}: saving batch", now.format("%b %d, %H:%M:%S"));
+        if to_save.len() == SAVE_LENGTH {
+            let elapsed = last_save.elapsed().as_secs();
+            let tps = SAVE_LENGTH as u64 / elapsed;
+            println!("{}: saving batch, tps {}", now.format("%b %d, %H:%M:%S"), tps);
             write_saved(&to_save, true);
             to_save = Vec::new();
+            last_save = Instant::now();
         }
 
         let elapsed = start.elapsed().as_secs() as usize;

@@ -30,12 +30,13 @@ pub fn write_saved<T: Serialize>(items: &[T], gzip: bool) {
         Err(e) => panic!("failed to create file at {:?}:\n{:?}", path, e),
     };
 
+    eprintln!("saved file: {:?}", path);
     let to_write: String = serde_json::to_string(items).unwrap();
     let bytes: Vec<u8> = match gzip {
         false => to_write.into_bytes(),
         true => {
             let mut encoder = GzEncoder::new(Vec::new(), Compression::Default);
-            encoder.write(to_write.as_bytes()).unwrap();
+            encoder.write_all(to_write.as_bytes()).unwrap();
             encoder.finish().unwrap()
         }
     };
