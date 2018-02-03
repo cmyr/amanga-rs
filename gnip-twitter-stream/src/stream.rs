@@ -1,11 +1,10 @@
 use std::io::{self, BufReader, BufRead};
 use std::str;
+use std::cmp::{min, max};
 use std::string::FromUtf8Error;
-use std::sync::mpsc;
 use std::thread;
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::collections::HashMap;
 use std::time::{Instant, Duration};
 
 use reqwest::header::{Accept, AcceptEncoding, Connection, qitem, Encoding};
@@ -14,6 +13,10 @@ use serde_json::{self, Error as JsonError};
 
 use super::Credential;
 use tweet::Tweet;
+
+static STREAM_TIMEOUT_SECS: u64 = 30;
+static STREAM_EMPTY_RETRY_MILLIS: u64 = 100;
+static STREAM_MAX_RETRY_SECS: u64 = 300;
 
 #[derive(Debug)]
 /// Error that occurs when connecting to a url.
@@ -28,6 +31,7 @@ pub enum StreamError {
     Io(io::Error),
     Utf8(FromUtf8Error),
     Disconnect,
+    Timeout,
     Json(JsonError),
 }
 
@@ -70,10 +74,11 @@ impl StreamError {
 pub struct StreamConnection<'a> {
     cred: &'a Credential,
     endpoint: String,
-    handle: Option<thread::JoinHandle<()>>,
+    //handle: Option<thread::JoinHandle<()>>,
     send: mpsc::Sender<StreamResult>,
     is_running: Arc<AtomicBool>,
-    next_retry: Option<Instant>,
+    thread_id: usize,
+    //next_retry: Option<Instant>,
 }
 
 pub struct GnipStream<'a> {
@@ -113,11 +118,14 @@ impl<'a> StreamConnection<'a> {
         let stream = self.connect_stream()?;
         eprintln!("{}, {}", stream.status(), stream.headers());
         self.is_running.store(true, Ordering::Relaxed);
+        self.thread_id += 1;
 
         let chan = self.send.clone();
         let url = self.endpoint.clone();
         let is_running = self.is_running.clone();
-        let t = thread::spawn(move || {
+        let thread_id = self.thread_id;
+        let _ = thread::spawn(move || {
+            eprintln!("connection #{} starting thread #{}", &url.chars().last().unwrap(), thread_id);
             let mut reader = BufReader::new(stream);
             let mut brk = false;
             loop {
@@ -130,18 +138,18 @@ impl<'a> StreamConnection<'a> {
                 }
                 if brk {
                     eprintln!("brk set, exiting connection {}", &url);
-                    is_running.store(false, Ordering::Relaxed);
                     break
                     }
                 }
+            is_running.store(false, Ordering::Relaxed);
+            eprintln!("connection #{} exiting thread #{}", &url.chars().last().unwrap(), thread_id);
             });
-        self.handle = Some(t);
         Ok(())
     }
 
     fn retry(&mut self) -> Result<(), ConnectionError> {
         eprintln!("retrying {}", self.endpoint);
-        self.handle.take().map(|h| h.join().expect("couldn't join thread"));
+        //self.handle.take().map(|h| h.join().expect("couldn't join thread"));
         self.start()
     }
 }
@@ -157,10 +165,10 @@ impl<'a> GnipStream<'a> {
             StreamConnection {
                 cred: cred,
                 endpoint: url.to_owned(),
-                handle: None,
+                //handle: None,
                 send: send.clone(),
                 is_running: Arc::new(AtomicBool::new(false)),
-                next_retry: None,
+                thread_id: 0,
             }
         }).collect::<Vec<_>>();
 
@@ -175,18 +183,44 @@ impl<'a> GnipStream<'a> {
         Ok(())
     }
 
+    /// get an item, with a timeout
+    fn get_next(&self) -> StreamResult {
+        let start = Instant::now();
+        loop {
+            match self.recv.try_recv() {
+                Ok(next) => return next,
+                Err(mpsc::TryRecvError::Empty) => {
+                    if start.elapsed().as_secs() >= STREAM_TIMEOUT_SECS {
+                        eprintln!("timeout elapsed");
+                        for conn in self.connections.iter() {
+                            conn.is_running.store(false, Ordering::Relaxed);
+                        }
+                        return Err(StreamError::Timeout)
+                    } else {
+                        thread::sleep(Duration::from_millis(STREAM_EMPTY_RETRY_MILLIS));
+                    }
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    eprintln!("mpsc disconnected");
+                    return Err(StreamError::Disconnect)
+                }
+            }
+        }
+    }
+
     fn try_reconnect(&mut self) {
         eprintln!("trying reconnect");
         for mut conn in self.connections.iter_mut() {
-            let not_running = !conn.is_running.load(Ordering::Relaxed);
-            let should_retry = conn.next_retry.map(|inst| inst >= Instant::now()).unwrap_or(true);
-            if not_running && should_retry {
-                let next_retry = if conn.retry().is_err() {
-                    Some(Instant::now() + Duration::new(30, 0))
-                } else {
-                    None
-                };
-                conn.next_retry = next_retry;
+            if conn.is_running.load(Ordering::Relaxed) { continue }
+            let mut retry_secs = 1u64;
+            loop {
+                match conn.retry() {
+                    Ok(_) => break,
+                    Err(err) => eprintln!("reconnect failed with error: {:?}. Retry in {} seconds",
+                                          err, retry_secs),
+                }
+                thread::sleep(Duration::from_secs(retry_secs));
+                retry_secs = min(STREAM_MAX_RETRY_SECS, max(2, retry_secs * retry_secs));
             }
         }
     }
@@ -196,6 +230,7 @@ fn next_in_stream<R: BufRead>(stream: &mut R) -> StreamResult {
     let mut buf = Vec::new();
     let read_bytes = stream.read_until(b'\r', &mut buf)?;
     if read_bytes == 0 {
+        eprintln!("read 0 bytes from stream (disconnect)");
         Err(StreamError::Disconnect)
     } else {
        let msg = String::from_utf8(buf)?;
@@ -206,10 +241,10 @@ fn next_in_stream<R: BufRead>(stream: &mut R) -> StreamResult {
 impl<'a> Iterator for GnipStream<'a> {
     type Item = StreamResult;
     fn next(&mut self) -> Option<StreamResult> {
-        let n = self.recv.recv().ok();
-        if n.as_ref().map(|n| n.is_err()).unwrap_or(false) {
+        let next = self.get_next();
+        if next.is_err() {
             self.try_reconnect();
         }
-        n
+        Some(next)
     }
 }
