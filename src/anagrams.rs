@@ -1,3 +1,4 @@
+use std::fmt;
 use std::collections::HashMap;
 
 use edit_distance::edit_distance;
@@ -24,7 +25,7 @@ impl Anagrammable for Tweet {
 }
 
 pub struct AnagramFinder<T> {
-    cache: HashMap<Vec<char>, T>,
+    cache: HashMap<AnagramHash, T>,
     hits: Vec<(T, T)>,
     seen: usize,
 }
@@ -39,7 +40,7 @@ impl<T: Anagrammable> AnagramFinder<T> {
     }
     pub fn add(&mut self, item: &T) {
         self.seen += 1;
-        let hash = anagram_hash(item.anagrammable());
+        let hash = AnagramHash::new(item.anagrammable());
         let exists = self.cache.contains_key(&hash);
 
         if exists {
@@ -102,4 +103,56 @@ pub fn anagram_hash(s: &str) -> Vec<char> {
         .collect::<Vec<char>>();
     out.sort();
     out
+}
+
+const ASCII_LOWERCASE_OFFSET: u8 = 97;
+
+/// Stores an ascii char and a count as a single u16.
+///
+/// This makes our hash 52 stack bytes
+///
+/// Storing the actual char is currently redundant, because it can be determined
+/// from the index; however space savings would be possible by using `SmallVec`.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct AnagramHash([u16; 26]);
+
+impl AnagramHash {
+    fn new(s: &str) -> Self {
+        let mut h: [u16; 26] = [0; 26];
+        for c in s.chars().filter(is_ascii_letter).flat_map(char::to_lowercase) {
+            let b = c as u16;
+            let idx = (b - ASCII_LOWERCASE_OFFSET as u16) as usize;
+            if h[idx] == 0 {
+                h[idx] = b << 9;
+            }
+            h[idx] += 1;
+        }
+        AnagramHash(h)
+    }
+}
+
+impl fmt::Display for AnagramHash {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut result = String::new();
+        for chr in &self.0 {
+            if *chr == 0 { continue }
+            let count = chr & 511;
+            let chr = ((chr & 127 << 9) >> 9) as u8;
+            for _ in 0..count {
+                result.push(chr as char);
+            }
+        }
+        write!(f, "{}", result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn cleverness() {
+        let inp = "aabbccddeefffffghiz";
+        let h = AnagramHash::new(inp);
+        assert_eq!(&h.to_string(), inp)
+    }
 }
