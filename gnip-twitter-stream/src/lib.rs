@@ -7,6 +7,7 @@ extern crate reqwest;
 
 mod tweet;
 mod stream;
+mod error;
 
 pub use stream::GnipStream;
 pub use tweet::*;

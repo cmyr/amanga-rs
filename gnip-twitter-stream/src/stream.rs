@@ -1,74 +1,21 @@
-use std::io::{self, BufReader, BufRead};
+use std::io::{BufReader, BufRead};
 use std::str;
 use std::cmp::{min, max};
-use std::string::FromUtf8Error;
 use std::thread;
 use std::sync::{mpsc, Arc};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Instant, Duration};
 
 use reqwest::header::{Accept, AcceptEncoding, Connection, qitem, Encoding};
-use reqwest::{Client, Response, StatusCode, Error as ReqError};
-use serde_json::{self, Error as JsonError};
+use reqwest::{Client, Response, StatusCode};
+use serde_json;
 
 use super::Credential;
-use tweet::Tweet;
+use error::{ConnectionError, StreamError, StreamResult};
 
 static STREAM_TIMEOUT_SECS: u64 = 30;
 static STREAM_EMPTY_RETRY_MILLIS: u64 = 100;
 static STREAM_MAX_RETRY_SECS: u64 = 300;
-
-#[derive(Debug)]
-/// Error that occurs when connecting to a url.
-pub enum ConnectionError {
-    Http(ReqError),
-    UnexpectedStatus(StatusCode),
-}
-
-#[derive(Debug)]
-/// Error that occurs during the course of a connection.
-pub enum StreamError {
-    Io(io::Error),
-    Utf8(FromUtf8Error),
-    Disconnect,
-    Timeout,
-    Json(JsonError),
-}
-
-pub type StreamResult = Result<Tweet, StreamError>;
-
-impl From<io::Error> for StreamError {
-    fn from(error: io::Error) -> StreamError {
-        StreamError::Io(error)
-    }
-}
-
-impl From<FromUtf8Error> for StreamError {
-    fn from(error: FromUtf8Error) -> StreamError {
-        StreamError::Utf8(error)
-    }
-}
-
-impl From<ReqError> for ConnectionError {
-    fn from(error: ReqError) -> ConnectionError {
-        ConnectionError::Http(error)
-    }
-}
-
-impl From<JsonError> for StreamError {
-    fn from(error: JsonError) -> StreamError {
-        StreamError::Json(error)
-    }
-}
-
-impl StreamError {
-    pub fn is_disconnect(&self) -> bool {
-        match *self {
-            StreamError::Disconnect | StreamError::Io(_) => true,
-            _ => false,
-        }
-    }
-}
 
 /// A single connection to a stream component
 pub struct StreamConnection<'a> {
@@ -81,15 +28,13 @@ pub struct StreamConnection<'a> {
     //next_retry: Option<Instant>,
 }
 
+/// A number of connections to a multi-endpoint GnipStream.
 pub struct GnipStream<'a> {
     base_url: &'a str,
     part_urls: Vec<String>,
     recv: mpsc::Receiver<StreamResult>,
-    send: mpsc::Sender<StreamResult>,
     connections: Vec<StreamConnection<'a>>,
 }
-
-
 
 impl<'a> StreamConnection<'a> {
 
@@ -172,7 +117,7 @@ impl<'a> GnipStream<'a> {
             }
         }).collect::<Vec<_>>();
 
-        GnipStream { base_url, part_urls, recv, send, connections }
+        GnipStream { base_url, part_urls, recv, connections }
     }
 
 
