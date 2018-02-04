@@ -9,7 +9,7 @@ use std::env;
 //use std::time::Instant;
 
 use gnip_twitter_stream::{load_cred, GnipStream};
-use manga_rs::{SimpleAdapter, simple_find_anagrams};
+use manga_rs::{SimpleAdapter, AsciiTester, MemoryStore, process_item, filter_all};
 
 fn main() {
     let cred_path = match env::var("TWITTER_CRED_PATH") {
@@ -27,23 +27,26 @@ fn main() {
     //let mut filt_count = 0usize;
     //let mut last_print = 0usize;
     //let start = Instant::now();
-    let mut finder = SimpleAdapter::new();
-    let mut iter = streamer.flat_map(|item| item.ok());
-    simple_find_anagrams(&mut iter, &mut finder);
+    let mut adapter = SimpleAdapter::new();
+    let mut tester = AsciiTester;
+    let mut store = MemoryStore::new();
+    //let mut iter = streamer.flat_map(|item| item.ok());
+    //simple_find_anagrams(&mut iter, &mut finder);
 
-    //while let Some(stream_result) = streamer.next() {
-        //let tweet = match stream_result {
-            //Ok(s) => s,
-            //Err(e) => { println!("error in stream {:?})", e); return },
-        //};
+    while let Some(stream_result) = streamer.next() {
+        let tweet = match stream_result {
+            Ok(s) => s,
+            Err(e) => { println!("error in stream {:?})", e); return },
+        };
 
         //count += 1;
 
-        //if filter_all(&tweet) {
+        if filter_all(&tweet) {
             //filt_count += 1;
+            process_item(tweet, &mut store, &mut adapter, &mut tester);
             //finder.add(&tweet);
-        //}
-
+        }
+    }
         //let elapsed = start.elapsed().as_secs() as usize;
         //if filt_count % 100 == 0 && filt_count != last_print && count > 0 && elapsed > 0 {
             //last_print = filt_count;
@@ -54,4 +57,3 @@ fn main() {
         //}
     //}
 }
-

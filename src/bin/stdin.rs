@@ -5,15 +5,24 @@ extern crate serde_json;
 use std::io::{self, BufRead};
 
 //use gnip_twitter_stream::Tweet;
-use manga_rs::{SimpleAdapter, simple_find_anagrams};
-
+use manga_rs::{SimpleAdapter, AsciiTester, MemoryStore, process_item};
 fn main() {
 
-    let mut finder = SimpleAdapter::new();
-
     let stdin = io::stdin();
-    let mut iter = stdin.lock().lines().map(Result::unwrap);
-    simple_find_anagrams(&mut iter, &mut finder);
-    finder.print_results();
+    let mut adapter = SimpleAdapter::new();
+    let mut tester = AsciiTester;
+    let mut store = MemoryStore::new();
+
+    for item in stdin.lock().lines() {
+        let item = match item {
+            Ok(item) => item,
+            Err(e) => {
+                println!("error in stream: {:?}", e);
+                break
+            }
+        };
+        process_item(item, &mut store, &mut adapter, &mut tester);
+    }
+    adapter.print_results();
 }
 

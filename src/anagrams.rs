@@ -7,6 +7,8 @@ use gnip_twitter_stream::Tweet;
 
 use filters::is_ascii_letter;
 
+const ASCII_LOWERCASE_OFFSET: u8 = 97;
+
 /// A trait for types that have some string representation suitable
 /// for anagram comparisons.
 pub trait AsStr {
@@ -32,17 +34,9 @@ pub trait Adapter<T> {
 /// This type represents some collection of tests to filter out these less
 /// desirable results.
 pub trait Tester<T> {
-    fn is_match(&self, p1: &T, p2: &T) -> bool;
-}
-
-/// A trait similar to `Hasher`, but anagram specific. Should produce a
-/// 'fingerprint' which should be identical for inputs which are considered
-/// anagrams under a particular set of constraints (for instance, a french
-/// language fingerprinter might not consider 'café' to be an anagram of 'face',
-/// but an english language one might.)
-pub trait Fingerprinter {
     type Fingerprint: Hash + Eq;
-    fn fingerprint(&mut self, s: &str) -> Self::Fingerprint;
+    fn fingerprint(&mut self, s: &T) -> Self::Fingerprint;
+    fn is_match(&self, p1: &T, p2: &T) -> bool;
 }
 
 pub struct SimpleAdapter<T> {
@@ -52,13 +46,10 @@ pub struct SimpleAdapter<T> {
 }
 
 /// A (hashmap backed) in memory store.
-struct MemoryStore<K, V>(HashMap<K, V>);
+pub struct MemoryStore<K, V>(HashMap<K, V>);
 
 /// A simple tester for ascii text.
-struct AsciiTester;
-
-/// A simple fingerprinter for ascii text.
-struct AsciiFingerprinter;
+pub struct AsciiTester;
 
 /// Stores an ascii char and a count as a single u16.
 ///
@@ -67,7 +58,7 @@ struct AsciiFingerprinter;
 /// Storing the actual char is currently redundant, because it can be determined
 /// from the index; however space savings would be possible by using `SmallVec`.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-struct AsciiFingerprint([u16; 26]);
+pub struct AsciiFingerprint([u16; 26]);
 
 impl<T: AsStr + Clone> Adapter<T> for SimpleAdapter<T> {
     fn will_check(&mut self, _item: &T) {
@@ -83,54 +74,8 @@ impl<T: AsStr + Clone> Adapter<T> for SimpleAdapter<T> {
     }
 }
 
-pub fn find_anagrams<T, S, ST, A, TE, F>(source: &mut S,
-                                         store: &mut ST,
-                                         adapter: &mut A,
-                                         tester: &TE,
-                                         fingerp: &mut F)
-    where T: AsStr,
-          S: Iterator<Item=T>,
-          ST: Store<F::Fingerprint, T>,
-          A: Adapter<T>,
-          TE: Tester<T>,
-          F: Fingerprinter,
-{
-    for item in source {
-        let ident = fingerp.fingerprint(item.as_str());
-        adapter.will_check(&item);
-        {
-            let hit = store.get_item(&ident);
-            let is_hit = match store.get_item(&ident) {
-                Some(ref hit) => {
-                    adapter.possible_match(&item, hit);
-                    tester.is_match(&item, hit)
-                }
-                None => false,
-            };
-
-            if is_hit {
-                adapter.handle_match(&item, hit.unwrap());
-                continue
-            }
-        }
-        store.insert(ident, item)
-    }
-}
-
-pub fn simple_find_anagrams<T, S, A>(source: &mut S, adapter: &mut A)
-    where T: AsStr,
-          S: Iterator<Item=T>,
-          A: Adapter<T>,
-{
-    let mut fingerp = AsciiFingerprinter;
-    let mut store = MemoryStore::new();
-    let tester = AsciiTester;
-
-    find_anagrams(source, &mut store, adapter, &tester, &mut fingerp)
-}
-
 impl<K: Hash + Eq, V> MemoryStore<K, V> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         MemoryStore(HashMap::new())
     }
 }
@@ -146,8 +91,40 @@ impl<K: Hash + Eq, V> Store<K, V> for MemoryStore<K, V> {
 }
 
 impl<T: AsStr> Tester<T> for AsciiTester {
+    type Fingerprint = AsciiFingerprint;
+
+    fn fingerprint(&mut self, s: &T) -> Self::Fingerprint {
+        let mut h: [u16; 26] = [0; 26];
+        for c in s.as_str().chars()
+            .filter(is_ascii_letter)
+            .flat_map(char::to_lowercase) {
+                let b = c as u16;
+                let idx = (b - ASCII_LOWERCASE_OFFSET as u16) as usize;
+                if h[idx] == 0 {
+                    h[idx] = b << 9;
+                }
+                h[idx] += 1;
+        }
+        AsciiFingerprint(h)
+    }
+
     fn is_match(&self, p1: &T, p2: &T) -> bool {
         test_distance(p1.as_str(), p2.as_str())
+    }
+}
+
+impl fmt::Display for AsciiFingerprint {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut result = String::new();
+        for chr in &self.0 {
+            if *chr == 0 { continue }
+            let count = chr & 511;
+            let chr = ((chr & 127 << 9) >> 9) as u8;
+            for _ in 0..count {
+                result.push(chr as char);
+            }
+        }
+        write!(f, "{}", result)
     }
 }
 
@@ -169,6 +146,36 @@ impl<T: AsStr> SimpleAdapter<T> {
                      two.as_str());
         }
     }
+}
+
+/// Handles a single item.
+pub fn process_item<T, S, A, TE>(item: T,
+                                 store: &mut S,
+                                 adapter: &mut A,
+                                 tester: &mut TE)
+    where T: AsStr,
+          S: Store<TE::Fingerprint, T>,
+          A: Adapter<T>,
+          TE: Tester<T>,
+{
+    let ident = tester.fingerprint(&item);
+    adapter.will_check(&item);
+    {
+        let hit = store.get_item(&ident);
+        let is_hit = match store.get_item(&ident) {
+            Some(ref hit) => {
+                adapter.possible_match(&item, hit);
+                tester.is_match(&item, hit)
+            }
+            None => false,
+        };
+
+        if is_hit {
+            return adapter.handle_match(&item, hit.unwrap());
+        }
+    }
+
+    store.insert(ident, item)
 }
 
 pub fn test_distance(s1: &str, s2: &str) -> bool {
@@ -207,6 +214,7 @@ fn word_split_sort<T: AsRef<str>>(s: T) -> String {
     words.as_slice().join(" ")
 }
 
+#[allow(dead_code)]
 pub fn anagram_hash(s: &str) -> Vec<char> {
     let mut out = s.chars().filter(is_ascii_letter)
         .flat_map(char::to_lowercase)
@@ -215,40 +223,13 @@ pub fn anagram_hash(s: &str) -> Vec<char> {
     out
 }
 
-const ASCII_LOWERCASE_OFFSET: u8 = 97;
-
-impl Fingerprinter for AsciiFingerprinter {
-    type Fingerprint = AsciiFingerprint;
-    fn fingerprint(&mut self, s: &str) -> Self::Fingerprint {
-        let mut h: [u16; 26] = [0; 26];
-        for c in s.chars().filter(is_ascii_letter).flat_map(char::to_lowercase) {
-            let b = c as u16;
-            let idx = (b - ASCII_LOWERCASE_OFFSET as u16) as usize;
-            if h[idx] == 0 {
-                h[idx] = b << 9;
-            }
-            h[idx] += 1;
-        }
-        AsciiFingerprint(h)
-    }
-}
-
-impl fmt::Display for AsciiFingerprint {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut result = String::new();
-        for chr in &self.0 {
-            if *chr == 0 { continue }
-            let count = chr & 511;
-            let chr = ((chr & 127 << 9) >> 9) as u8;
-            for _ in 0..count {
-                result.push(chr as char);
-            }
-        }
-        write!(f, "{}", result)
-    }
-}
-
 impl AsStr for String {
+    fn as_str(&self) -> &str {
+        &self
+    }
+}
+
+impl<'a> AsStr for &'a str {
     fn as_str(&self) -> &str {
         &self
     }
@@ -266,9 +247,9 @@ mod tests {
     #[test]
     fn cleverness() {
         let inp = "aabbccddeefffffghiz";
-        let mut ascii_f = AsciiFingerprinter;
-        let h = ascii_f.fingerprint(inp);
+        let mut tester = AsciiTester;
+        let h = tester.fingerprint(&inp);
 
-        assert_eq!(&h.to_string(), inp)
+        assert_eq!(h.to_string(), inp)
     }
 }
