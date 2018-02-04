@@ -9,26 +9,37 @@ use filters::is_ascii_letter;
 
 /// A trait for types that have some string representation suitable
 /// for anagram comparisons.
-//TODO: replace with AsRef<str>
-pub trait Anagrammable: Clone {
-    fn anagrammable(&self) -> &str;
+pub trait AsStr {
+    fn as_str(&self) -> &str;
 }
 
+/// A trait for types which store anagram candidates.
 pub trait Store<K, V> {
     fn get_item(&self, key: &K) -> Option<&V>;
     fn insert(&mut self, key: K, value: V);
 }
 
+/// A trait for types which handle results of anagram search.
 pub trait Adapter<T> {
-    fn possible_match(&mut self, _hit: &T) { }
+    fn will_check(&mut self, _item: &T) { }
+    fn possible_match(&mut self, _p1: &T, _p2: &T) { }
     fn handle_match(&mut self, p1: &T, p2: &T);
 }
 
-//TODO: combine tester + fingerprinter
+/// A trait for types which validate potential anagrams.
+///
+/// A large number of anagrams are overly similar or otherwise disatisfying.
+/// This type represents some collection of tests to filter out these less
+/// desirable results.
 pub trait Tester<T> {
     fn is_match(&self, p1: &T, p2: &T) -> bool;
 }
 
+/// A trait similar to `Hasher`, but anagram specific. Should produce a
+/// 'fingerprint' which should be identical for inputs which are considered
+/// anagrams under a particular set of constraints (for instance, a french
+/// language fingerprinter might not consider 'café' to be an anagram of 'face',
+/// but an english language one might.)
 pub trait Fingerprinter {
     type Fingerprint: Hash + Eq;
     fn fingerprint(&mut self, s: &str) -> Self::Fingerprint;
@@ -37,12 +48,16 @@ pub trait Fingerprinter {
 pub struct SimpleAdapter<T> {
     hits: Vec<(T, T)>,
     seen: usize,
+    tested: usize,
 }
 
+/// A (hashmap backed) in memory store.
 struct MemoryStore<K, V>(HashMap<K, V>);
 
+/// A simple tester for ascii text.
 struct AsciiTester;
 
+/// A simple fingerprinter for ascii text.
 struct AsciiFingerprinter;
 
 /// Stores an ascii char and a count as a single u16.
@@ -54,9 +69,13 @@ struct AsciiFingerprinter;
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct AsciiFingerprint([u16; 26]);
 
-impl<T: Anagrammable> Adapter<T> for SimpleAdapter<T> {
-    fn possible_match(&mut self, _hit: &T) {
+impl<T: AsStr + Clone> Adapter<T> for SimpleAdapter<T> {
+    fn will_check(&mut self, _item: &T) {
         self.seen += 1;
+    }
+
+    fn possible_match(&mut self, _p1: &T, _p2: &T) {
+        self.tested += 1;
     }
 
     fn handle_match(&mut self, p1: &T, p2: &T) {
@@ -69,7 +88,7 @@ pub fn find_anagrams<T, S, ST, A, TE, F>(source: &mut S,
                                          adapter: &mut A,
                                          tester: &TE,
                                          fingerp: &mut F)
-    where T: Anagrammable,
+    where T: AsStr,
           S: Iterator<Item=T>,
           ST: Store<F::Fingerprint, T>,
           A: Adapter<T>,
@@ -77,12 +96,13 @@ pub fn find_anagrams<T, S, ST, A, TE, F>(source: &mut S,
           F: Fingerprinter,
 {
     for item in source {
-        let ident = fingerp.fingerprint(item.anagrammable());
+        let ident = fingerp.fingerprint(item.as_str());
+        adapter.will_check(&item);
         {
             let hit = store.get_item(&ident);
             let is_hit = match store.get_item(&ident) {
                 Some(ref hit) => {
-                    adapter.possible_match(hit);
+                    adapter.possible_match(&item, hit);
                     tester.is_match(&item, hit)
                 }
                 None => false,
@@ -98,7 +118,7 @@ pub fn find_anagrams<T, S, ST, A, TE, F>(source: &mut S,
 }
 
 pub fn simple_find_anagrams<T, S, A>(source: &mut S, adapter: &mut A)
-    where T: Anagrammable,
+    where T: AsStr,
           S: Iterator<Item=T>,
           A: Adapter<T>,
 {
@@ -125,18 +145,19 @@ impl<K: Hash + Eq, V> Store<K, V> for MemoryStore<K, V> {
     }
 }
 
-impl<T: Anagrammable> Tester<T> for AsciiTester {
+impl<T: AsStr> Tester<T> for AsciiTester {
     fn is_match(&self, p1: &T, p2: &T) -> bool {
-        test_distance(p1.anagrammable(), p2.anagrammable())
+        test_distance(p1.as_str(), p2.as_str())
     }
 }
 
 
-impl<T: Anagrammable> SimpleAdapter<T> {
+impl<T: AsStr> SimpleAdapter<T> {
     pub fn new() -> Self {
         SimpleAdapter {
             hits: Vec::new(),
             seen: 0,
+            tested: 0,
         }
     }
 
@@ -144,8 +165,8 @@ impl<T: Anagrammable> SimpleAdapter<T> {
         println!("saw {} items, found {} anagrams.", self.seen, self.hits.len());
         for &(ref one, ref two) in self.hits.iter() {
             println!("---------\n{}\n--↕︎--\n{}",
-                     one.anagrammable(),
-                     two.anagrammable());
+                     one.as_str(),
+                     two.as_str());
         }
     }
 }
@@ -227,14 +248,14 @@ impl fmt::Display for AsciiFingerprint {
     }
 }
 
-impl Anagrammable for String {
-    fn anagrammable(&self) -> &str {
+impl AsStr for String {
+    fn as_str(&self) -> &str {
         &self
     }
 }
 
-impl Anagrammable for Tweet {
-    fn anagrammable(&self) -> &str {
+impl AsStr for Tweet {
+    fn as_str(&self) -> &str {
         &self.text
     }
 }

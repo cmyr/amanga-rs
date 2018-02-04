@@ -11,5 +11,5 @@ mod utils;
 
 pub use utils::write_saved;
 pub use filters::filter_all;
-pub use anagrams::{Anagrammable, Store, Adapter, Tester, Fingerprinter,
+pub use anagrams::{AsStr, Store, Adapter, Tester, Fingerprinter,
 find_anagrams, simple_find_anagrams, SimpleAdapter};

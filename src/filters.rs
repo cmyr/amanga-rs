@@ -41,8 +41,8 @@ pub fn filter_all(tweet: &Tweet) -> bool {
     mention_filter(tweet) &&
         url_filter(tweet) &&
         en_filter(tweet) &&
-    manual_url_filter(tweet) &&
-    letterish(tweet)
+        manual_url_filter(tweet) &&
+        letterish(tweet)
 }
 
 
