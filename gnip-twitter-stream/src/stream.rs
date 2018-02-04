@@ -40,7 +40,7 @@ impl<'a> StreamConnection<'a> {
 
     fn connect_stream(&self) -> Result<Response, ConnectionError> {
         eprintln!("connecting to url {}", &self.endpoint);
-        let client = Client::new().unwrap();
+        let client = Client::new();
         let resp = client.get(&self.endpoint)
             .basic_auth(self.cred.user.clone(), Some(self.cred.pw.clone()))
             .header(Accept::json())
@@ -48,7 +48,7 @@ impl<'a> StreamConnection<'a> {
             .header(AcceptEncoding(vec![qitem(Encoding::Gzip)]))
             .send()?;
 
-        if resp.status() != &StatusCode::Ok {
+        if resp.status() != StatusCode::Ok {
             return Err(ConnectionError::UnexpectedStatus(resp.status().to_owned()))
         }
         Ok(resp)

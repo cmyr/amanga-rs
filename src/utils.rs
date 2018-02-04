@@ -35,7 +35,7 @@ pub fn write_saved<T: Serialize>(items: &[T], gzip: bool) {
     let bytes: Vec<u8> = match gzip {
         false => to_write.into_bytes(),
         true => {
-            let mut encoder = GzEncoder::new(Vec::new(), Compression::Default);
+            let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
             encoder.write_all(to_write.as_bytes()).unwrap();
             encoder.finish().unwrap()
         }
