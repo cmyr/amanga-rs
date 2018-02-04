@@ -5,28 +5,15 @@ extern crate serde_json;
 use std::io::{self, BufRead};
 
 //use gnip_twitter_stream::Tweet;
-use manga_rs::AnagramFinder;
+use manga_rs::{SimpleAdapter, simple_find_anagrams};
 
 fn main() {
 
-    let mut finder = AnagramFinder::new();
+    let mut finder = SimpleAdapter::new();
 
     let stdin = io::stdin();
-    for string in stdin.lock().lines() {
-        let string = string.expect("failed to parse stdin");
-
-        //let tweet = match serde_json::from_str::<Tweet>(&string) {
-            //Ok(t) => t,
-            //Err(e) => { println!("ERROR {:?}\n{}", e, string); continue },
-        //};
-
-        //if filters::filter_all(&tweet) {
-            finder.add(&string);
-            //finder.add(&tweet.text);
-        //}
-
-    }
-
+    let mut iter = stdin.lock().lines().map(Result::unwrap);
+    simple_find_anagrams(&mut iter, &mut finder);
     finder.print_results();
 }
 

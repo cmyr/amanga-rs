@@ -52,13 +52,13 @@ mod tests {
 
     #[test]
     fn test_ascii_letter() {
-        assert!(!is_ascii_letter('@'));
-        assert!(!is_ascii_letter('['));
-        assert!(!is_ascii_letter('`'));
-        assert!(!is_ascii_letter('{'));
-        assert!(is_ascii_letter('A'));
-        assert!(is_ascii_letter('Z'));
-        assert!(is_ascii_letter('a'));
-        assert!(is_ascii_letter('z'));
+        assert!(!is_ascii_letter(&'@'));
+        assert!(!is_ascii_letter(&'['));
+        assert!(!is_ascii_letter(&'`'));
+        assert!(!is_ascii_letter(&'{'));
+        assert!(is_ascii_letter(&'A'));
+        assert!(is_ascii_letter(&'Z'));
+        assert!(is_ascii_letter(&'a'));
+        assert!(is_ascii_letter(&'z'));
     }
 }
