@@ -142,12 +142,12 @@ impl<T: AsStr> SimpleAdapter<T> {
     }
 
     pub fn print_results(&self) {
-        println!("saw {} items, found {} anagrams.", self.seen, self.hits.len());
         for &(ref one, ref two) in self.hits.iter() {
             println!("---------\n{}\n--↕︎--\n{}",
                      one.as_str(),
                      two.as_str());
         }
+        println!("saw {} items, found {} anagrams.", self.seen, self.hits.len());
     }
 }
 
