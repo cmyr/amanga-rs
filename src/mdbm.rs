@@ -88,11 +88,12 @@ impl Mdbm {
     }
 }
 
-impl<V> Store<String, V> for Mdbm
-    where V: Serialize + DeserializeOwned,
+impl<K, V> Store<K, V> for Mdbm
+    where K: AsRef<[u8]>,
+          V: Serialize + DeserializeOwned,
 {
 
-  fn get_item(&self, key: &String) -> Option<V> {
+  fn get_item(&self, key: &K) -> Option<V> {
       for chunk in &self.chunks {
           if let Ok(val) = chunk.fetch(key) {
               return val.deserialize().ok()
@@ -101,7 +102,7 @@ impl<V> Store<String, V> for Mdbm
       None
   }
 
-    fn insert(&mut self, key: String, value: V) {
+    fn insert(&mut self, key: K, value: V) {
         self.check_health();
         self.chunks.last_mut().unwrap().store(key, &value).unwrap();
     }
@@ -134,13 +135,13 @@ mod tests {
                 db.insert(key, value);
             }
             assert_eq!(db.chunks.len(), 1);
-            let item = db.get_item(&"key 1".into());
+            let item = db.get_item(&String::from("key 1"));
             assert_eq!(item, Some("value 1".to_string()));
         }
         // reopen and check that our data was saved
         let db = Mdbm::with_path(tempdir.path(), 10);
         assert_eq!(db.chunks.len(), 1);
-        let item = db.get_item(&"key 1".into());
+        let item = db.get_item(&String::from("key 1"));
         assert_eq!(item, Some("value 1".to_string()));
     }
 }

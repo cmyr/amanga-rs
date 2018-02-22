@@ -59,7 +59,7 @@ pub struct AsciiTester;
 /// Storing the actual char is currently redundant, because it can be determined
 /// from the index; however space savings would be possible by using `SmallVec`.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct AsciiFingerprint([u16; 26]);
+pub struct AsciiFingerprint([u8; 26]);
 
 impl<T: AsStr + Clone> Adapter<T> for SimpleAdapter<T> {
     fn will_check(&mut self, _item: &T) {
@@ -95,15 +95,11 @@ impl<T: AsStr> Tester<T> for AsciiTester {
     type Fingerprint = AsciiFingerprint;
 
     fn fingerprint(&mut self, s: &T) -> Self::Fingerprint {
-        let mut h: [u16; 26] = [0; 26];
+        let mut h: [u8; 26] = [0; 26];
         for c in s.as_str().chars()
             .filter(is_ascii_letter)
             .flat_map(char::to_lowercase) {
-                let b = c as u16;
-                let idx = (b - ASCII_LOWERCASE_OFFSET as u16) as usize;
-                if h[idx] == 0 {
-                    h[idx] = b << 9;
-                }
+                let idx = (c as u8 - ASCII_LOWERCASE_OFFSET) as usize;
                 h[idx] += 1;
         }
         AsciiFingerprint(h)
@@ -117,15 +113,21 @@ impl<T: AsStr> Tester<T> for AsciiTester {
 impl fmt::Display for AsciiFingerprint {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut result = String::new();
-        for chr in &self.0 {
+        for (idx, chr) in self.0.iter().enumerate() {
             if *chr == 0 { continue }
-            let count = chr & 511;
-            let chr = ((chr & 127 << 9) >> 9) as u8;
-            for _ in 0..count {
-                result.push(chr as char);
+            //let count = chr & 511;
+            //let chr = ((chr & 127 << 9) >> 9) as u8;
+            for _ in 0..*chr {
+                result.push((idx as u8 + ASCII_LOWERCASE_OFFSET) as char);
             }
         }
         write!(f, "{}", result)
+    }
+}
+
+impl AsRef<[u8]> for AsciiFingerprint {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
     }
 }
 
