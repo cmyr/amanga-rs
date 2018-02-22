@@ -94,7 +94,7 @@ impl<V> Store<String, V> for Mdbm
 
   fn get_item(&self, key: &String) -> Option<V> {
       for chunk in &self.chunks {
-          if let Ok(val) = chunk.fetch(key.as_ref()) {
+          if let Ok(val) = chunk.fetch(key) {
               return val.deserialize().ok()
           }
       }
@@ -103,7 +103,7 @@ impl<V> Store<String, V> for Mdbm
 
     fn insert(&mut self, key: String, value: V) {
         self.check_health();
-        self.chunks.last_mut().unwrap().store(key.as_ref(), &value).unwrap();
+        self.chunks.last_mut().unwrap().store(key, &value).unwrap();
     }
 }
 
@@ -121,8 +121,6 @@ fn iter_dbm_paths(dir: &Path) -> io::Result<Box<Iterator<Item=PathBuf>>> {
 mod tests {
     use super::*;
     use tempdir::TempDir;
-    use std::fs::{File, OpenOptions, rename, create_dir};
-
 
     #[test]
     fn smoke_test() {
