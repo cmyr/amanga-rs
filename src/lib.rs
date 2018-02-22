@@ -4,10 +4,14 @@ extern crate serde;
 extern crate chrono;
 extern crate edit_distance;
 extern crate flate2;
+extern crate gnudbm;
+#[cfg(test)]
+extern crate tempdir;
 
 mod filters;
 mod anagrams;
 mod utils;
+mod mdbm;
 
 pub use utils::write_saved;
 pub use filters::filter_all;

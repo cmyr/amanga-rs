@@ -1,6 +1,7 @@
 use std::fmt;
 use std::hash::Hash;
 use std::collections::HashMap;
+use std::clone::Clone;
 
 use edit_distance::edit_distance;
 use gnip_twitter_stream::Tweet;
@@ -17,7 +18,7 @@ pub trait AsStr {
 
 /// A trait for types which store anagram candidates.
 pub trait Store<K, V> {
-    fn get_item(&self, key: &K) -> Option<&V>;
+    fn get_item(&self, key: &K) -> Option<V>;
     fn insert(&mut self, key: K, value: V);
 }
 
@@ -80,9 +81,9 @@ impl<K: Hash + Eq, V> MemoryStore<K, V> {
     }
 }
 
-impl<K: Hash + Eq, V> Store<K, V> for MemoryStore<K, V> {
-    fn get_item(&self, key: &K) -> Option<&V> {
-        self.0.get(key)
+impl<K: Hash + Eq, V: Clone> Store<K, V> for MemoryStore<K, V> {
+    fn get_item(&self, key: &K) -> Option<V> {
+        self.0.get(key).map(V::clone)
     }
 
     fn insert(&mut self, key: K, value: V) {
@@ -171,7 +172,7 @@ pub fn process_item<T, S, A, TE>(item: T,
         };
 
         if is_hit {
-            return adapter.handle_match(&item, hit.unwrap());
+            return adapter.handle_match(&item, &hit.unwrap());
         }
     }
 
