@@ -2,7 +2,6 @@ extern crate gnip_twitter_stream;
 extern crate manga_rs;
 extern crate serde_json;
 extern crate serde;
-extern crate edit_distance;
 
 //use std::str;
 use std::env;
@@ -28,7 +27,7 @@ fn main() {
     //let mut last_print = 0usize;
     //let start = Instant::now();
     let mut adapter = SimpleAdapter::new();
-    let mut tester = AsciiTester;
+    let mut tester = AsciiTester::default();
     let mut store = MemoryStore::new();
     //let mut iter = streamer.flat_map(|item| item.ok());
     //simple_find_anagrams(&mut iter, &mut finder);

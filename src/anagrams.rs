@@ -3,10 +3,10 @@ use std::hash::Hash;
 use std::collections::HashMap;
 use std::clone::Clone;
 
-use edit_distance::edit_distance;
 use gnip_twitter_stream::Tweet;
 
 use filters::is_ascii_letter;
+use edit_dist::EditDistance;
 
 const ASCII_LOWERCASE_OFFSET: u8 = 97;
 
@@ -37,7 +37,7 @@ pub trait Adapter<T> {
 pub trait Tester<T> {
     type Fingerprint: Hash + Eq;
     fn fingerprint(&mut self, s: &T) -> Self::Fingerprint;
-    fn is_match(&self, p1: &T, p2: &T) -> bool;
+    fn is_match(&mut self, p1: &T, p2: &T) -> bool;
 }
 
 pub struct SimpleAdapter<T> {
@@ -50,7 +50,10 @@ pub struct SimpleAdapter<T> {
 pub struct MemoryStore<K, V>(HashMap<K, V>);
 
 /// A simple tester for ascii text.
-pub struct AsciiTester;
+#[derive(Debug, Clone, Default)]
+pub struct AsciiTester {
+    edit_dist: EditDistance,
+}
 
 /// Stores an ascii char and a count as a single u16.
 ///
@@ -105,8 +108,24 @@ impl<T: AsStr> Tester<T> for AsciiTester {
         AsciiFingerprint(h)
     }
 
-    fn is_match(&self, p1: &T, p2: &T) -> bool {
-        test_distance(p1.as_str(), p2.as_str())
+    fn is_match(&mut self, p1: &T, p2: &T) -> bool {
+        self.test_distance(p1.as_str(), p2.as_str())
+    }
+}
+
+impl AsciiTester {
+    fn test_distance(&mut self, a: &str, b: &str) -> bool {
+        const MIN_DIST: f64 = 0.5;
+        let dist = self.edit_dist.distance(&lowercase_filtered(a), &lowercase_filtered(b));
+        if (dist as f64) / (b.chars().count() as f64) < MIN_DIST {
+            return false
+        }
+
+        let a = word_split_sort(a);
+        let b = word_split_sort(b);
+        //assert_eq!(a.len(), b.len(), "{} / {}", a, b);
+        let dist = self.edit_dist.distance(&a, &b);
+        (dist as f64) / (b.chars().count() as f64) > MIN_DIST
     }
 }
 
@@ -181,20 +200,6 @@ pub fn process_item<T, S, A, TE>(item: T,
     store.insert(ident, item)
 }
 
-pub fn test_distance(s1: &str, s2: &str) -> bool {
-    const MIN_DIST: f64 = 0.5;
-    let dist = edit_distance(&lowercase_filtered(s1), &lowercase_filtered(s2));
-    if (dist as f64) / (s2.chars().count() as f64) < MIN_DIST {
-        return false
-    }
-
-    let s1 = word_split_sort(s1);
-    let s2 = word_split_sort(s2);
-    //assert_eq!(s1.len(), s2.len(), "{} / {}", s1, s2);
-    let dist = edit_distance(&s1, &s2);
-    (dist as f64) / (s2.chars().count() as f64) > MIN_DIST
-}
-
 fn lowercase_filtered<T: AsRef<str>>(s: T) -> String {
     s.as_ref().chars()
         .filter(is_ascii_letter)
@@ -250,7 +255,7 @@ mod tests {
     #[test]
     fn cleverness() {
         let inp = "aabbccddeefffffghiz";
-        let mut tester = AsciiTester;
+        let mut tester = AsciiTester::default();
         let h = tester.fingerprint(&inp);
 
         assert_eq!(h.to_string(), inp)
