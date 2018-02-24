@@ -12,6 +12,13 @@ impl EditDistance {
     {
         let a = a.as_ref();
         let b = b.as_ref();
+        let start_idx = a.chars().zip(b.chars())
+            .take_while(|&(ac, bc)| ac == bc)
+            .count();
+        // fails if input not ascii
+        let a = &a[start_idx..];
+        let b = &b[start_idx..];
+
         let a_count = a.chars().count();
         let b_count = b.chars().count();
         let nb_cols = b_count + 1;
@@ -40,14 +47,10 @@ impl EditDistance {
 
         for (i, ca) in a.chars().enumerate() {
             for (j, cb) in b.chars().enumerate() {
-                let alternatives = [
-                    // deletion
-                    self.storage[row_col_to_idx(i, j+1, nb_cols)] + 1,
-                    // insertion
-                    self.storage[row_col_to_idx(i+1, j, nb_cols)] + 1,
-                    // match or substitution
-                    self.storage[row_col_to_idx(i, j, nb_cols)] + if ca == cb { 0 } else { 1 }];
-                let min_alt = *alternatives.iter().min().unwrap();
+                let alt1 = self.storage[row_col_to_idx(i, j+1, nb_cols)] + 1;
+                let alt2 = self.storage[row_col_to_idx(i+1, j, nb_cols)] + 1;
+                let alt3 = self.storage[row_col_to_idx(i, j, nb_cols)] + if ca == cb { 0 } else { 1 };
+                let min_alt = alt1.min(alt2).min(alt3);
                 self.storage[row_col_to_idx(i+1, j+1, nb_cols)] = min_alt;
             }
         }

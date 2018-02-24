@@ -6,7 +6,7 @@ use std::clone::Clone;
 use gnip_twitter_stream::Tweet;
 
 use filters::is_ascii_letter;
-use edit_dist::EditDistance;
+pub use edit_dist::EditDistance;
 
 const ASCII_LOWERCASE_OFFSET: u8 = 97;
 
@@ -116,7 +116,11 @@ impl<T: AsStr> Tester<T> for AsciiTester {
 impl AsciiTester {
     fn test_distance(&mut self, a: &str, b: &str) -> bool {
         const MIN_DIST: f64 = 0.5;
-        let dist = self.edit_dist.distance(&lowercase_filtered(a), &lowercase_filtered(b));
+        if a == b { return false }
+        let a1 = lowercase_filtered(a);
+        let b1 = lowercase_filtered(b);
+        if a1 == b1 { return false }
+        let dist = self.edit_dist.distance(&a1, &b1);
         if (dist as f64) / (b.chars().count() as f64) < MIN_DIST {
             return false
         }
@@ -236,9 +240,13 @@ fn lowercase_filtered<T: AsRef<str>>(s: T) -> String {
         .collect::<String>()
 }
 
+//TODO: this has three allocations too many
 /// Given a string, removes ignored chars, lowercases, and sorts by word.
 fn word_split_sort<T: AsRef<str>>(s: T) -> String {
     let s = s.as_ref();
+    let s: String = s.chars()
+        .flat_map(|c| if is_ascii_letter(&c) { c.to_lowercase() } else { ' '.to_lowercase() })
+        .collect();
     let mut words = s.split_whitespace()
         .map(|s| {
             s.chars()
@@ -288,5 +296,46 @@ mod tests {
         let h = tester.fingerprint(&inp);
 
         assert_eq!(h.to_string(), inp)
+    }
+
+    #[test]
+    fn word_split() {
+        let one = "twenty six\n\n#MissUniverse #Philippines";
+        let two = "#MissUniverse #Philippines\n\ntwenty six";
+        assert_eq!(word_split_sort(one), word_split_sort(two));
+    }
+
+    #[test]
+    fn distance() {
+        let one = "twenty six\n\n#MissUniverse #Philippines";
+        let two = "#MissUniverse #Philippines\n\ntwenty six";
+        let mut tester = AsciiTester::default();
+
+        assert!(!tester.test_distance(one, two));
+        assert!(!tester.is_match(&one, &two));
+
+        let one = "joji // will he";
+        let two = "willhe//joji";
+        eprintln!("{} / {}", word_split_sort(one), word_split_sort(two));
+
+        assert!(!tester.test_distance(one, two));
+        assert!(!tester.is_match(&one, &two));
+    }
+
+    #[test]
+    fn integration() {
+    let mut adapter = SimpleAdapter::new();
+    let mut tester = AsciiTester::default();
+    let mut store = MemoryStore::new();
+    let one = "twenty six\n\n#MissUniverse #Philippines";
+    let two = "#MissUniverse #Philippines\n\ntwenty six";
+
+    process_item(one, &mut store, &mut adapter, &mut tester);
+    process_item(two, &mut store, &mut adapter, &mut tester);
+
+    process_item("joji // will he", &mut store, &mut adapter, &mut tester);
+    process_item("willhe//joji", &mut store, &mut adapter, &mut tester);
+
+    assert_eq!(adapter.hits.len(), 0);
     }
 }

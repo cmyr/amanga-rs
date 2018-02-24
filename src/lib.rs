@@ -16,5 +16,5 @@ mod edit_dist;
 
 pub use utils::write_saved;
 pub use filters::filter_all;
-pub use anagrams::{AsStr, SimpleAdapter, Store, Adapter, Tester, AsciiTester, MemoryStore, process_item, check_item};
+pub use anagrams::{AsStr, SimpleAdapter, Store, Adapter, Tester, AsciiTester, MemoryStore, EditDistance, process_item, check_item};
 pub use mdbm::Mdbm;
