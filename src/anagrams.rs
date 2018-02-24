@@ -180,6 +180,33 @@ pub fn process_item<T, S, A, TE>(item: T,
           A: Adapter<T>,
           TE: Tester<T>,
 {
+    process_item_impl(item, store, adapter, tester, true)
+}
+
+/// Checks a new item against stored items, without modifying storage.
+/// Mostly exposed for benchmarking.
+pub fn check_item<T, S, A, TE>(item: T,
+                               store: &mut S,
+                               adapter: &mut A,
+                               tester: &mut TE)
+    where T: AsStr,
+          S: Store<TE::Fingerprint, T>,
+          A: Adapter<T>,
+          TE: Tester<T>,
+{
+    process_item_impl(item, store, adapter, tester, false)
+}
+
+fn process_item_impl<T, S, A, TE>(item: T,
+                                  store: &mut S,
+                                  adapter: &mut A,
+                                  tester: &mut TE,
+                                  store_new: bool)
+    where T: AsStr,
+          S: Store<TE::Fingerprint, T>,
+          A: Adapter<T>,
+          TE: Tester<T>,
+{
     let ident = tester.fingerprint(&item);
     adapter.will_check(&item);
     {
@@ -197,7 +224,9 @@ pub fn process_item<T, S, A, TE>(item: T,
         }
     }
 
-    store.insert(ident, item)
+    if store_new {
+        store.insert(ident, item)
+    }
 }
 
 fn lowercase_filtered<T: AsRef<str>>(s: T) -> String {

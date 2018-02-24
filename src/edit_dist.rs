@@ -5,7 +5,7 @@ pub struct EditDistance {
 
 impl EditDistance {
     // substantially based on https://github.com/febeling/edit-distance,
-    // but with much fewer allocations
+    // but with fewer allocations
     pub fn distance<A, B>(&mut self, a: A, b: B) -> usize
         where A: AsRef<str>,
               B: AsRef<str>,
