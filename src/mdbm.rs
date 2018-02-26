@@ -32,7 +32,7 @@ pub struct Mdbm<V: Serialize> {
 
 impl<V: Serialize> Mdbm<V> {
     /// Loads or creates a new db collection.
-    pub fn with_path<P: AsRef<Path>>(p: P, chunk_size: usize) -> Self {
+    pub fn new<P: AsRef<Path>>(p: P, chunk_size: usize) -> Self {
         let base_path = p.as_ref().to_owned();
         eprintln!("using base path {}", base_path.display());
         if !base_path.exists() {
@@ -163,7 +163,7 @@ mod tests {
     fn smoke_test() {
         let tempdir = TempDir::new("mdbm_test").unwrap();
         {
-            let mut db = Mdbm::with_path(tempdir.path(), 10);
+            let mut db = Mdbm::new(tempdir.path(), 10);
             assert_eq!(db.chunks.len(), 0);
             for i in 0..5 {
                 let key = format!("key {}", i);
@@ -175,7 +175,7 @@ mod tests {
             assert_eq!(item, Some("value 1".to_string()));
         }
         // reopen and check that our data was saved
-        let db = Mdbm::with_path(tempdir.path(), 10);
+        let db = Mdbm::new(tempdir.path(), 10);
         assert_eq!(db.chunks.len(), 1);
         let item = db.get_item(&String::from("key 2"));
         assert_eq!(item, Some("value 2".to_string()));

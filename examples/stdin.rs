@@ -33,6 +33,10 @@ struct Opt {
     /// Print more stuff
     #[structopt(short = "v", long = "verbose")]
     verbose: bool,
+
+    /// Mdbm chunk size
+    #[structopt(short = "s", long = "size", default_value = "2000000")]
+    mdbm_size: usize,
 }
 
 
@@ -47,7 +51,7 @@ fn main() {
         None => TempDir::new("anagrams_rs").unwrap().path().to_owned(),
     };
 
-    let mut store = Mdbm::with_path(&path, 2_000_000);
+    let mut store = Mdbm::new(&path, opt.mdbm_size);
 
     for item in stdin.lock().lines() {
         let item = match item {
