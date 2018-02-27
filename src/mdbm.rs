@@ -15,7 +15,6 @@ use lru_cache::LruCache;
 
 use anagrams::Store;
 
-const ITEMS_PER_FILE: usize = 2_000_000;
 // in # of items
 const CACHE_SIZE: usize = 200_000;
 const DB_CREATION_DATE_KEY: &str = "net.cmyr.creationDate";
@@ -91,11 +90,9 @@ impl<V: Serialize> Mdbm<V> {
         let cache_len = self.cache.borrow().len();
         if cache_len > (CACHE_SIZE / 10) * 9 {
             // clear out some cache space
-            let mut i = 0;
             for _ in 0..(CACHE_SIZE / 10) {
                 let (k, v) = self.cache.borrow_mut().remove_lru().unwrap();
                 self.chunks.last_mut().unwrap().store(k, &v).unwrap();
-                i += 1;
             }
             // can't ever be called before we add the first chunk
             self.last_chunk_len = self.chunks.last().map(|c| c.count().unwrap())
@@ -115,20 +112,31 @@ impl<K, V> Store<K, V> for Mdbm<V>
           V: Serialize + DeserializeOwned + Clone,
 {
 
-  fn get_item(&self, key: &K) -> Option<V> {
-      if let Some(val) = self.cache.borrow_mut().get_mut(key.as_ref()) {
-          return Some(val.to_owned())
-      }
+    fn remove(&mut self, key: &K) {
+        if self.cache.borrow_mut().remove(key.as_ref()).is_some() {
+            return
+        }
+        for chunk in &self.chunks {
+            if let Ok(true) = chunk.remove(key.as_ref()) {
+                return
+            }
+        }
+    }
 
-      for chunk in &self.chunks {
-          if let Ok(val) = chunk.fetch(key.as_ref()) {
-              let val: V = val.deserialize().unwrap();
-              self.cache.borrow_mut().insert(key.as_ref().to_owned(), val.clone());
-              return Some(val)
-          }
-      }
-      None
-  }
+    fn get_item(&self, key: &K) -> Option<V> {
+        if let Some(val) = self.cache.borrow_mut().get_mut(key.as_ref()) {
+            return Some(val.to_owned())
+        }
+
+        for chunk in &self.chunks {
+            if let Ok(val) = chunk.fetch(key.as_ref()) {
+                let val: V = val.deserialize().unwrap();
+                self.cache.borrow_mut().insert(key.as_ref().to_owned(), val.clone());
+                return Some(val)
+            }
+        }
+        None
+    }
 
     fn insert(&mut self, key: K, value: V) {
         self.check_health();

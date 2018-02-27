@@ -18,6 +18,7 @@ pub trait AsStr {
 
 /// A trait for types which store anagram candidates.
 pub trait Store<K, V> {
+    fn remove(&mut self, key: &K);
     fn get_item(&self, key: &K) -> Option<V>;
     fn insert(&mut self, key: K, value: V);
 }
@@ -85,6 +86,10 @@ impl<K: Hash + Eq, V> MemoryStore<K, V> {
 }
 
 impl<K: Hash + Eq, V: Clone> Store<K, V> for MemoryStore<K, V> {
+    fn remove(&mut self, key: &K) {
+        self.0.remove(key);
+    }
+
     fn get_item(&self, key: &K) -> Option<V> {
         self.0.get(key).map(V::clone)
     }
@@ -224,6 +229,7 @@ fn process_item_impl<T, S, A, TE>(item: T,
         };
 
         if is_hit {
+            store.remove(&ident);
             return adapter.handle_match(&item, &hit.unwrap());
         }
     }
