@@ -1,16 +1,21 @@
-extern crate chrono;
+//extern crate chrono;
 #[macro_use]
 extern crate diesel;
 extern crate dotenv;
+extern crate manga_rs;
+extern crate serde;
+extern crate serde_json;
 
 pub mod schema;
 pub mod models;
 
+use std::env;
+use std::time::SystemTime;
+
 use diesel::prelude::*;
 use diesel::pg::PgConnection;
 use dotenv::dotenv;
-
-use std::env;
+use serde::Serialize;
 
 use models::{Hit, NewHit};
 
@@ -23,7 +28,9 @@ pub fn establish_connection() -> PgConnection {
 
 pub fn create_hit(conn: &PgConnection, one: &str, two: &str, hithash: &str) -> QueryResult<usize> {
     use schema::hits;
-    let new_hit = NewHit { one, two, hithash };
+    let hitdate = SystemTime::now();
+    let status = 0;
+    let new_hit = NewHit { one, two, hitdate, status, hithash };
     diesel::insert_into(hits::table)
         .values(&new_hit)
         .execute(conn)
@@ -53,4 +60,34 @@ pub fn get_hits(
         .filter(id.gt(newer_than.unwrap_or(0)))
         .limit(max_results)
         .load::<Hit>(conn)
+}
+
+pub fn count_hits(conn: &PgConnection) -> QueryResult<usize> {
+    use schema::hits::dsl::*;
+    let result: i64 = hits.count().get_result(conn)?;
+    Ok(result as usize)
+}
+
+pub struct DbAdapter {
+    connection: PgConnection,
+}
+
+impl DbAdapter {
+    pub fn new() -> Self {
+        DbAdapter { connection: establish_connection() }
+    }
+
+    pub fn count(&self) -> usize {
+        count_hits(&self.connection).unwrap()
+    }
+}
+
+impl<T: Serialize> manga_rs::Adapter<T> for DbAdapter {
+    fn handle_match(&mut self, p1: &T, p2: &T) {
+        let s1 = serde_json::to_string(p1).unwrap();
+        let s2 = serde_json::to_string(p2).unwrap();
+        if let Err(e) = create_hit(&self.connection, &s1, &s2, "no hash") {
+            eprintln!("error handling match: {:?}, {}/{}", e, s1, s2);
+        }
+    }
 }

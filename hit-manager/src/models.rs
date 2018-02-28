@@ -14,6 +14,8 @@ pub struct Hit {
 #[derive(Insertable)]
 #[table_name = "hits"]
 pub struct NewHit<'a> {
+    pub status: i32,
+    pub hitdate: SystemTime,
     pub one: &'a str,
     pub two: &'a str,
     pub hithash: &'a str,
