@@ -32,22 +32,26 @@ pub fn create_hit(conn: &PgConnection, one: &str, two: &str, hithash: &str)
         .execute(conn)
 }
 
-pub fn update_status(conn: &PgConnection, id: i32, new_status: i32)
-    -> QueryResult<usize> {
-    use schema::hits;
+pub fn update_status(conn: &PgConnection, with_id: i32, new_status: i32)
+    -> QueryResult<()> {
+    let mut hit = get_hit(conn, with_id)?;
+    hit.status = new_status;
+    hit.save_changes::<Hit>(conn)?;
+    Ok(())
+}
+
+fn get_hit(conn: &PgConnection, with_id: i32) -> QueryResult<Hit> {
     use schema::hits::dsl::*;
-    diesel::update(hits.find(id))
-        .set(status.eq(&new_status))
-        .execute(conn)
+    hits.find(with_id)
+        .get_result(conn)
 }
 
 pub fn get_hits(conn: &PgConnection, of_status: i32, newer_than: Option<i32>,
                 max_results: i64) -> QueryResult<Vec<Hit>> {
-    use schema::hits;
     use schema::hits::dsl::*;
 
-    hits.filter(status.eq(&of_status))
-        .filter(id.gt(&newer_than.unwrap_or(0)))
+    hits.filter(status.eq(of_status))
+        .filter(id.gt(newer_than.unwrap_or(0)))
         .limit(max_results)
         .load::<Hit>(conn)
 }

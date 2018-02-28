@@ -3,13 +3,14 @@ use std::time::SystemTime;
 
 #[derive(Identifiable)]
 #[derive(Queryable)]
+#[derive(AsChangeset)]
 pub struct Hit {
-    id: i32,
-    status: i32,
-    hitdate: SystemTime,
-    one: String,
-    two: String,
-    hithash: String,
+    pub id: i32,
+    pub status: i32,
+    pub hitdate: SystemTime,
+    pub one: String,
+    pub two: String,
+    pub hithash: String,
 }
 
 #[derive(Insertable)]
