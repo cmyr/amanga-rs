@@ -1,9 +1,7 @@
 use super::schema::hits;
 use std::time::SystemTime;
 
-#[derive(Identifiable)]
-#[derive(Queryable)]
-#[derive(AsChangeset)]
+#[derive(Identifiable, Queryable, AsChangeset)]
 pub struct Hit {
     pub id: i32,
     pub status: i32,
@@ -14,7 +12,7 @@ pub struct Hit {
 }
 
 #[derive(Insertable)]
-#[table_name="hits"]
+#[table_name = "hits"]
 pub struct NewHit<'a> {
     pub one: &'a str,
     pub two: &'a str,
