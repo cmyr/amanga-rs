@@ -1,6 +1,7 @@
-/target/
+target/
 **/*.rs.bk
 cred.json
+Cargo.lock
+.env
 
-/gnip-twitter-stream/target/
 /gnip-twitter-stream/Cargo.lock
