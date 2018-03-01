@@ -13,13 +13,15 @@ use std::env;
 use std::time::SystemTime;
 
 use diesel::prelude::*;
-use diesel::pg::PgConnection;
+use diesel::pg::{Pg, PgConnection};
+use diesel::expression::{AsExpression, Expression};
+
 use dotenv::dotenv;
 use serde::Serialize;
 
 use manga_rs::{Adapter, Tester};
 
-use models::{Hit, NewHit, HitStatus};
+use models::{Hit, HitStatus, NewHit};
 
 pub fn establish_connection() -> PgConnection {
     dotenv().ok();
@@ -28,13 +30,23 @@ pub fn establish_connection() -> PgConnection {
     PgConnection::establish(&database_url).expect(&format!("Error connecting to {}", database_url))
 }
 
-pub fn create_hit<H: AsRef<[u8]>>(conn: &PgConnection, one: &str, two: &str,
-                                  hithash: &H) -> QueryResult<usize> {
+pub fn create_hit<H: AsRef<[u8]>>(
+    conn: &PgConnection,
+    one: &str,
+    two: &str,
+    hithash: &H,
+) -> QueryResult<usize> {
     use schema::hits;
     let hitdate = SystemTime::now();
     let status = HitStatus::New;
     let hithash = hithash.as_ref().to_owned();
-    let new_hit = NewHit { one, two, hitdate, status, hithash };
+    let new_hit = NewHit {
+        one,
+        two,
+        hitdate,
+        status,
+        hithash,
+    };
     diesel::insert_into(hits::table)
         .values(&new_hit)
         .execute(conn)
@@ -52,23 +64,36 @@ fn get_hit(conn: &PgConnection, with_id: i32) -> QueryResult<Hit> {
     hits.find(with_id).get_result(conn)
 }
 
-pub fn get_hits(
+pub fn get_hits<T, C, N>(
     conn: &PgConnection,
-    of_status: HitStatus,
-    newer_than: Option<i32>,
-    max_results: i64,
-) -> QueryResult<Vec<Hit>> {
+    of_status: T,
+    max_results: C,
+    newer_than: N,
+) -> QueryResult<Vec<Hit>>
+where
+    T: Into<Option<HitStatus>>,
+    C: Into<Option<i64>>,
+    N: Into<Option<i32>>,
+{
     use schema::hits::dsl::*;
-
-    hits.filter(status.eq(of_status))
-        .filter(id.gt(newer_than.unwrap_or(0)))
-        .limit(max_results)
-        .load::<Hit>(conn)
+    if let Some(stat) = status.into() {
+        hits.filter(status.eq(stat))
+            .filter(id.gt(newer_than.into().unwrap_or(0)))
+            .limit(max_results.into().unwrap_or(i64::max_value()))
+            .load::<Hit>(conn)
+    } else {
+        hits.filter(id.gt(newer_than.into().unwrap_or(0)))
+            .limit(max_results.into().unwrap_or(i64::max_value()))
+            .load::<Hit>(conn)
+    }
 }
 
-pub fn count_hits(conn: &PgConnection, of_status: Option<HitStatus>) -> QueryResult<usize> {
+pub fn count_hits<T>(conn: &PgConnection, of_status: T) -> QueryResult<usize>
+where
+    T: Into<Option<HitStatus>>,
+{
     use schema::hits::dsl::*;
-    let result: i64 = match of_status {
+    let result: i64 = match of_status.into() {
         Some(s) => hits.filter(status.eq(s)).count().get_result(conn)?,
         None => hits.count().get_result(conn)?,
     };
@@ -81,18 +106,30 @@ pub struct DbAdapter {
 
 impl DbAdapter {
     pub fn new() -> Self {
-        DbAdapter { connection: establish_connection() }
+        DbAdapter {
+            connection: establish_connection(),
+        }
     }
 
     pub fn count(&self) -> usize {
         count_hits(&self.connection, None).unwrap()
     }
+
+    pub fn get_hits<T, C, N>(&self, status: T, max_results: C, newer_than: N) -> Vec<Hit>
+    where
+        T: Into<Option<HitStatus>>,
+        C: Into<Option<i64>>,
+        N: Into<Option<i32>>,
+    {
+        get_hits(&self.connection, status, max_results, newer_than).unwrap_or_default()
+    }
 }
 
 impl<T, TE> Adapter<T, TE> for DbAdapter
-where T: Serialize,
-      TE: Tester<T>,
-      TE::Fingerprint: AsRef<[u8]>,
+where
+    T: Serialize,
+    TE: Tester<T>,
+    TE::Fingerprint: AsRef<[u8]>,
 {
     fn handle_match(&mut self, p1: &T, p2: &T, hash: &TE::Fingerprint) {
         let s1 = serde_json::to_string(p1).unwrap();
