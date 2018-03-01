@@ -17,6 +17,8 @@ use diesel::pg::PgConnection;
 use dotenv::dotenv;
 use serde::Serialize;
 
+use manga_rs::{Adapter, Tester};
+
 use models::{Hit, NewHit};
 
 pub fn establish_connection() -> PgConnection {
@@ -26,10 +28,12 @@ pub fn establish_connection() -> PgConnection {
     PgConnection::establish(&database_url).expect(&format!("Error connecting to {}", database_url))
 }
 
-pub fn create_hit(conn: &PgConnection, one: &str, two: &str, hithash: &str) -> QueryResult<usize> {
+pub fn create_hit<H: AsRef<[u8]>>(conn: &PgConnection, one: &str, two: &str,
+                                  hithash: &H) -> QueryResult<usize> {
     use schema::hits;
     let hitdate = SystemTime::now();
     let status = 0;
+    let hithash = hithash.as_ref().to_owned();
     let new_hit = NewHit { one, two, hitdate, status, hithash };
     diesel::insert_into(hits::table)
         .values(&new_hit)
@@ -82,11 +86,15 @@ impl DbAdapter {
     }
 }
 
-impl<T: Serialize> manga_rs::Adapter<T> for DbAdapter {
-    fn handle_match(&mut self, p1: &T, p2: &T) {
+impl<T, TE> manga_rs::Adapter<T, TE> for DbAdapter
+where T: Serialize,
+      TE: Tester<T>,
+      TE::Fingerprint: AsRef<[u8]>,
+{
+    fn handle_match(&mut self, p1: &T, p2: &T, hash: &TE::Fingerprint) {
         let s1 = serde_json::to_string(p1).unwrap();
         let s2 = serde_json::to_string(p2).unwrap();
-        if let Err(e) = create_hit(&self.connection, &s1, &s2, "no hash") {
+        if let Err(e) = create_hit(&self.connection, &s1, &s2, hash) {
             eprintln!("error handling match: {:?}, {}/{}", e, s1, s2);
         }
     }

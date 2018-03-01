@@ -2,9 +2,9 @@ CREATE TABLE hits (
   id SERIAL PRIMARY KEY,
   status INTEGER NOT NULL,
   hitdate TIMESTAMP NOT NULL,
-  hithash TEXT NOT NULL,
   one TEXT NOT NULL,
-  two TEXT NOT NULL
+  two TEXT NOT NULL,
+  hithash BYTEA NOT NULL
 );
 
 CREATE INDEX status_idx ON hits (status);

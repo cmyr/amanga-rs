@@ -8,7 +8,7 @@ pub struct Hit {
     pub hitdate: SystemTime,
     pub one: String,
     pub two: String,
-    pub hithash: String,
+    pub hithash: Vec<u8>,
 }
 
 #[derive(Insertable)]
@@ -18,5 +18,5 @@ pub struct NewHit<'a> {
     pub hitdate: SystemTime,
     pub one: &'a str,
     pub two: &'a str,
-    pub hithash: &'a str,
+    pub hithash: Vec<u8>,
 }

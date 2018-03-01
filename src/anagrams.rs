@@ -24,10 +24,10 @@ pub trait Store<K, V> {
 }
 
 /// A trait for types which handle results of anagram search.
-pub trait Adapter<T> {
+pub trait Adapter<T, TE: Tester<T>> {
     fn will_check(&mut self, _item: &T) { }
     fn possible_match(&mut self, _p1: &T, _p2: &T) { }
-    fn handle_match(&mut self, p1: &T, p2: &T);
+    fn handle_match(&mut self, p1: &T, p2: &T, hash: &TE::Fingerprint);
 }
 
 /// A trait for types which validate potential anagrams.
@@ -56,16 +56,14 @@ pub struct AsciiTester {
     edit_dist: EditDistance,
 }
 
-/// Stores an ascii char and a count as a single u16.
-///
-/// This makes our hash 52 stack bytes
-///
-/// Storing the actual char is currently redundant, because it can be determined
-/// from the index; however space savings would be possible by using `SmallVec`.
+/// Stores a count for each ascii char, in order.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct AsciiFingerprint([u8; 26]);
 
-impl<T: AsStr + Clone> Adapter<T> for SimpleAdapter<T> {
+impl<T, TE> Adapter<T, TE> for SimpleAdapter<T>
+    where T: AsStr + Clone,
+          TE: Tester<T>,
+{
     fn will_check(&mut self, _item: &T) {
         self.seen += 1;
     }
@@ -74,7 +72,7 @@ impl<T: AsStr + Clone> Adapter<T> for SimpleAdapter<T> {
         self.tested += 1;
     }
 
-    fn handle_match(&mut self, p1: &T, p2: &T) {
+    fn handle_match(&mut self, p1: &T, p2: &T, _hash: &TE::Fingerprint) {
         self.hits.push((p1.to_owned(), p2.to_owned()));
     }
 }
@@ -186,7 +184,7 @@ pub fn process_item<T, S, A, TE>(item: T,
                                  tester: &mut TE)
     where T: AsStr,
           S: Store<TE::Fingerprint, T>,
-          A: Adapter<T>,
+          A: Adapter<T, TE>,
           TE: Tester<T>,
 {
     process_item_impl(item, store, adapter, tester, true)
@@ -200,7 +198,7 @@ pub fn check_item<T, S, A, TE>(item: T,
                                tester: &mut TE)
     where T: AsStr,
           S: Store<TE::Fingerprint, T>,
-          A: Adapter<T>,
+          A: Adapter<T, TE>,
           TE: Tester<T>,
 {
     process_item_impl(item, store, adapter, tester, false)
@@ -213,7 +211,7 @@ fn process_item_impl<T, S, A, TE>(item: T,
                                   store_new: bool)
     where T: AsStr,
           S: Store<TE::Fingerprint, T>,
-          A: Adapter<T>,
+          A: Adapter<T, TE>,
           TE: Tester<T>,
 {
     let ident = tester.fingerprint(&item);
@@ -230,7 +228,7 @@ fn process_item_impl<T, S, A, TE>(item: T,
 
         if is_hit {
             store.remove(&ident);
-            return adapter.handle_match(&item, &hit.unwrap());
+            return adapter.handle_match(&item, &hit.unwrap(), &ident);
         }
     }
 
