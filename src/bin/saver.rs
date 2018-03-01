@@ -56,7 +56,7 @@ fn main() {
             let tps = SAVE_LENGTH as u64 / elapsed;
             println!("{}: saving batch, tps {}", now.format("%b %d, %H:%M:%S"), tps);
             write_saved(&to_save, true);
-            to_save = Vec::new();
+            to_save.clear();
             last_save = Instant::now();
         }
 

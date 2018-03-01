@@ -16,6 +16,7 @@ lru-cache = "0.1.1"
 tempdir = "0.3.5"
 structopt = "0.2"
 criterion = "0.2"
+anagram-hit-manager = { version = "*", path = "./hit-manager" }
 
 [[bench]]
 name = "algos"
