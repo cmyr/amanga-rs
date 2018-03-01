@@ -4,7 +4,8 @@ CREATE TABLE hits (
   hitdate TIMESTAMP NOT NULL,
   one TEXT NOT NULL,
   two TEXT NOT NULL,
-  hithash BYTEA NOT NULL
+  hithash BYTEA NOT NULL,
+  hitlen INTEGER NOT NULL
 );
 
 CREATE INDEX status_idx ON hits (status);

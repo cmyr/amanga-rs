@@ -6,5 +6,6 @@ table! {
         one -> Text,
         two -> Text,
         hithash -> Bytea,
+        hitlen -> Int4,
     }
 }

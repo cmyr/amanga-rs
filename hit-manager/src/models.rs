@@ -49,6 +49,7 @@ pub struct Hit {
     pub one: String,
     pub two: String,
     pub hithash: Vec<u8>,
+    pub hitlen: i32,
 }
 
 #[derive(Insertable)]
@@ -59,4 +60,5 @@ pub struct NewHit<'a> {
     pub one: &'a str,
     pub two: &'a str,
     pub hithash: Vec<u8>,
+    pub hitlen: i32,
 }

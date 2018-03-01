@@ -13,8 +13,7 @@ use std::env;
 use std::time::SystemTime;
 
 use diesel::prelude::*;
-use diesel::pg::{Pg, PgConnection};
-use diesel::expression::{AsExpression, Expression};
+use diesel::pg::PgConnection;
 
 use dotenv::dotenv;
 use serde::Serialize;
@@ -40,12 +39,14 @@ pub fn create_hit<H: AsRef<[u8]>>(
     let hitdate = SystemTime::now();
     let status = HitStatus::New;
     let hithash = hithash.as_ref().to_owned();
+    let hitlen = hithash.iter().map(|i| *i as i32).sum();
     let new_hit = NewHit {
         one,
         two,
         hitdate,
         status,
         hithash,
+        hitlen,
     };
     diesel::insert_into(hits::table)
         .values(&new_hit)
@@ -76,7 +77,7 @@ where
     N: Into<Option<i32>>,
 {
     use schema::hits::dsl::*;
-    if let Some(stat) = status.into() {
+    if let Some(stat) = of_status.into() {
         hits.filter(status.eq(stat))
             .filter(id.gt(newer_than.into().unwrap_or(0)))
             .limit(max_results.into().unwrap_or(i64::max_value()))
