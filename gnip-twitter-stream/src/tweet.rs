@@ -56,3 +56,10 @@ pub struct UserMention {
     pub id_str: Option<String>,
     pub indices: (u64, u64),
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MinimalTweet {
+    #[serde(rename = "body")]
+    pub text: String,
+    pub link: String,
+}

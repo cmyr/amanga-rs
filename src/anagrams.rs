@@ -3,7 +3,7 @@ use std::hash::Hash;
 use std::collections::HashMap;
 use std::clone::Clone;
 
-use gnip_twitter_stream::Tweet;
+use gnip_twitter_stream::{Tweet, MinimalTweet};
 
 use filters::is_ascii_letter;
 pub use edit_dist::EditDistance;
@@ -287,6 +287,12 @@ impl<'a> AsStr for &'a str {
 }
 
 impl AsStr for Tweet {
+    fn as_str(&self) -> &str {
+        &self.text
+    }
+}
+
+impl AsStr for MinimalTweet {
     fn as_str(&self) -> &str {
         &self.text
     }
