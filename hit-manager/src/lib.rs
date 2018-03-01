@@ -19,7 +19,7 @@ use serde::Serialize;
 
 use manga_rs::{Adapter, Tester};
 
-use models::{Hit, NewHit};
+use models::{Hit, NewHit, HitStatus};
 
 pub fn establish_connection() -> PgConnection {
     dotenv().ok();
@@ -32,7 +32,7 @@ pub fn create_hit<H: AsRef<[u8]>>(conn: &PgConnection, one: &str, two: &str,
                                   hithash: &H) -> QueryResult<usize> {
     use schema::hits;
     let hitdate = SystemTime::now();
-    let status = 0;
+    let status = HitStatus::New;
     let hithash = hithash.as_ref().to_owned();
     let new_hit = NewHit { one, two, hitdate, status, hithash };
     diesel::insert_into(hits::table)
@@ -40,7 +40,7 @@ pub fn create_hit<H: AsRef<[u8]>>(conn: &PgConnection, one: &str, two: &str,
         .execute(conn)
 }
 
-pub fn update_status(conn: &PgConnection, with_id: i32, new_status: i32) -> QueryResult<()> {
+pub fn update_status(conn: &PgConnection, with_id: i32, new_status: HitStatus) -> QueryResult<()> {
     let mut hit = get_hit(conn, with_id)?;
     hit.status = new_status;
     hit.save_changes::<Hit>(conn)?;
@@ -54,7 +54,7 @@ fn get_hit(conn: &PgConnection, with_id: i32) -> QueryResult<Hit> {
 
 pub fn get_hits(
     conn: &PgConnection,
-    of_status: i32,
+    of_status: HitStatus,
     newer_than: Option<i32>,
     max_results: i64,
 ) -> QueryResult<Vec<Hit>> {
@@ -66,9 +66,12 @@ pub fn get_hits(
         .load::<Hit>(conn)
 }
 
-pub fn count_hits(conn: &PgConnection) -> QueryResult<usize> {
+pub fn count_hits(conn: &PgConnection, of_status: Option<HitStatus>) -> QueryResult<usize> {
     use schema::hits::dsl::*;
-    let result: i64 = hits.count().get_result(conn)?;
+    let result: i64 = match of_status {
+        Some(s) => hits.filter(status.eq(s)).count().get_result(conn)?,
+        None => hits.count().get_result(conn)?,
+    };
     Ok(result as usize)
 }
 
@@ -82,11 +85,11 @@ impl DbAdapter {
     }
 
     pub fn count(&self) -> usize {
-        count_hits(&self.connection).unwrap()
+        count_hits(&self.connection, None).unwrap()
     }
 }
 
-impl<T, TE> manga_rs::Adapter<T, TE> for DbAdapter
+impl<T, TE> Adapter<T, TE> for DbAdapter
 where T: Serialize,
       TE: Tester<T>,
       TE::Fingerprint: AsRef<[u8]>,
