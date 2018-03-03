@@ -79,9 +79,11 @@ fn main() {
         let mut hits = adapter.get_hits(None, 50, None);
         while hits.len() > 0 {
             for hit in hits.iter() {
-                eprintln!("======\n{}\n------\n{}", hit.one, hit.two);
+                //let p1: MinimalTweet = serde_json::from_str(&hit.one).unwrap();
+                //let p2: MinimalTweet = serde_json::from_str(&hit.two).unwrap();
+                eprintln!("======\n{} \t\t// {}\n------\n{} \t\t// {}", hit.one.text, hit.one.link(), hit.two.text, hit.two.link());
             }
-            let max_id = hits.iter().map(|h| h.id).max();
+            let max_id = hits.iter().map(|h| h.hit.id).max();
             hits = adapter.get_hits(None, 50, max_id);
         }
     }

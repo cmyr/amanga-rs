@@ -5,6 +5,7 @@ authors = ["Colin Rofls <colin@cmyr.net>"]
 
 [dependencies]
 manga-rs = { version = "*", path = "../" }
+gnip-twitter-stream = { version = "0.1", path = "../gnip-twitter-stream" }
 diesel = { version = "1.0.0", features = ["postgres"] }
 dotenv = "0.9.0"
 chrono = "0.4"

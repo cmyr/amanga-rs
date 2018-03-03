@@ -3,6 +3,7 @@
 extern crate diesel;
 extern crate dotenv;
 extern crate manga_rs;
+extern crate gnip_twitter_stream;
 extern crate serde;
 extern crate serde_json;
 
@@ -16,11 +17,11 @@ use diesel::prelude::*;
 use diesel::pg::PgConnection;
 
 use dotenv::dotenv;
-use serde::Serialize;
 
 use manga_rs::{Adapter, Tester};
+use gnip_twitter_stream::MinimalTweet;
 
-use models::{Hit, HitStatus, NewHit};
+use models::{Hit, JoinedHit, HitStatus, NewHit, Tweet};
 
 pub fn establish_connection() -> PgConnection {
     dotenv().ok();
@@ -33,23 +34,31 @@ pub fn create_hit<H: AsRef<[u8]>>(
     conn: &PgConnection,
     one: &str,
     two: &str,
+    one_id: u64,
+    two_id: u64,
     hithash: &H,
 ) -> QueryResult<usize> {
-    use schema::hits;
+    use schema::{hits, tweets};
     let hitdate = SystemTime::now();
     let status = HitStatus::New;
     let hithash = hithash.as_ref().to_owned();
     let hitlen = hithash.iter().map(|i| *i as i32).sum();
     let new_hit = NewHit {
-        one,
-        two,
         hitdate,
         status,
         hithash,
         hitlen,
     };
-    diesel::insert_into(hits::table)
+
+    let hit: Hit = diesel::insert_into(hits::table)
         .values(&new_hit)
+        .get_result(conn)?;
+
+    let tweet1 = Tweet::new(one, one_id, hit.id);
+    let tweet2 = Tweet::new(two, two_id, hit.id);
+
+    diesel::insert_into(tweets::table)
+        .values(&vec![tweet1, tweet2])
         .execute(conn)
 }
 
@@ -70,14 +79,14 @@ pub fn get_hits<T, C, N>(
     of_status: T,
     max_results: C,
     newer_than: N,
-) -> QueryResult<Vec<Hit>>
+) -> QueryResult<Vec<JoinedHit>>
 where
     T: Into<Option<HitStatus>>,
     C: Into<Option<i64>>,
     N: Into<Option<i32>>,
 {
     use schema::hits::dsl::*;
-    if let Some(stat) = of_status.into() {
+    let result = if let Some(stat) = of_status.into() {
         hits.filter(status.eq(stat))
             .filter(id.gt(newer_than.into().unwrap_or(0)))
             .limit(max_results.into().unwrap_or(i64::max_value()))
@@ -86,7 +95,21 @@ where
         hits.filter(id.gt(newer_than.into().unwrap_or(0)))
             .limit(max_results.into().unwrap_or(i64::max_value()))
             .load::<Hit>(conn)
-    }
+    };
+
+    let result: QueryResult<Vec<JoinedHit>> = result.map(|hs| {
+        hs.into_iter().map(|hit| {
+            let mut tweets = Tweet::belonging_to(&hit)
+                .load::<Tweet>(conn)
+                .expect("missing tweets is bad");
+            JoinedHit {
+                hit: hit,
+                two: tweets.pop().unwrap(),
+                one: tweets.pop().unwrap(),
+            }
+        }).collect()
+    });
+    result
 }
 
 pub fn count_hits<T>(conn: &PgConnection, of_status: T) -> QueryResult<usize>
@@ -116,7 +139,7 @@ impl DbAdapter {
         count_hits(&self.connection, None).unwrap()
     }
 
-    pub fn get_hits<T, C, N>(&self, status: T, max_results: C, newer_than: N) -> Vec<Hit>
+    pub fn get_hits<T, C, N>(&self, status: T, max_results: C, newer_than: N) -> Vec<JoinedHit>
     where
         T: Into<Option<HitStatus>>,
         C: Into<Option<i64>>,
@@ -126,17 +149,15 @@ impl DbAdapter {
     }
 }
 
-impl<T, TE> Adapter<T, TE> for DbAdapter
+impl<TE> Adapter<MinimalTweet, TE> for DbAdapter
 where
-    T: Serialize,
-    TE: Tester<T>,
+    TE: Tester<MinimalTweet>,
     TE::Fingerprint: AsRef<[u8]>,
 {
-    fn handle_match(&mut self, p1: &T, p2: &T, hash: &TE::Fingerprint) {
-        let s1 = serde_json::to_string(p1).unwrap();
-        let s2 = serde_json::to_string(p2).unwrap();
-        if let Err(e) = create_hit(&self.connection, &s1, &s2, hash) {
-            eprintln!("error handling match: {:?}, {}/{}", e, s1, s2);
+    fn handle_match(&mut self, p1: &MinimalTweet, p2: &MinimalTweet, hash: &TE::Fingerprint) {
+        if let Err(e) = create_hit(&self.connection, &p1.text, &p2.text,
+                                   p1.id(), p2.id(), hash) {
+            eprintln!("error handling match: {:?}", e);
         }
     }
 }
