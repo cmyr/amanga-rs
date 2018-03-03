@@ -6,6 +6,8 @@ extern crate manga_rs;
 extern crate gnip_twitter_stream;
 extern crate serde;
 extern crate serde_json;
+#[macro_use]
+extern crate serde_derive;
 
 pub mod schema;
 pub mod models;
@@ -21,7 +23,8 @@ use dotenv::dotenv;
 use manga_rs::{Adapter, Tester};
 use gnip_twitter_stream::MinimalTweet;
 
-use models::{Hit, JoinedHit, HitStatus, NewHit, Tweet};
+use models::NewHit;
+pub use models::{Hit, JoinedHit, HitStatus, Tweet};
 
 pub fn establish_connection() -> PgConnection {
     dotenv().ok();
@@ -82,18 +85,22 @@ pub fn get_hits<T, C, N>(
 ) -> QueryResult<Vec<JoinedHit>>
 where
     T: Into<Option<HitStatus>>,
-    C: Into<Option<i64>>,
+    C: Into<Option<usize>>,
     N: Into<Option<i32>>,
 {
     use schema::hits::dsl::*;
+    let max_results = max_results.into()
+        .unwrap_or(i64::max_value() as usize)
+        .min(i64::max_value() as usize) as i64;
+
     let result = if let Some(stat) = of_status.into() {
         hits.filter(status.eq(stat))
             .filter(id.gt(newer_than.into().unwrap_or(0)))
-            .limit(max_results.into().unwrap_or(i64::max_value()))
+            .limit(max_results)
             .load::<Hit>(conn)
     } else {
         hits.filter(id.gt(newer_than.into().unwrap_or(0)))
-            .limit(max_results.into().unwrap_or(i64::max_value()))
+            .limit(max_results)
             .load::<Hit>(conn)
     };
 
@@ -142,7 +149,7 @@ impl DbAdapter {
     pub fn get_hits<T, C, N>(&self, status: T, max_results: C, newer_than: N) -> Vec<JoinedHit>
     where
         T: Into<Option<HitStatus>>,
-        C: Into<Option<i64>>,
+        C: Into<Option<usize>>,
         N: Into<Option<i32>>,
     {
         get_hits(&self.connection, status, max_results, newer_than).unwrap_or_default()

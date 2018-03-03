@@ -9,8 +9,9 @@ use diesel::sql_types::Int4;
 use super::schema::hits;
 use super::schema::tweets;
 
-#[derive(Debug, Copy, Clone, PartialEq, FromSqlRow, AsExpression)]
+#[derive(Debug, Copy, Clone, PartialEq, FromSqlRow, AsExpression, Serialize, Deserialize)]
 #[sql_type = "Int4"]
+#[serde(rename_all="snake_case")]
 pub enum HitStatus {
     New = 0,
     FetchFailed = 1,
@@ -42,7 +43,7 @@ impl FromSql<Int4, Pg> for HitStatus {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, FromSqlRow, AsExpression)]
+#[derive(Debug, Copy, Clone, PartialEq, FromSqlRow, AsExpression, Serialize, Deserialize)]
 #[sql_type = "Int4"]
 pub enum TweetStatus {
     New = 0,
@@ -69,7 +70,7 @@ impl FromSql<Int4, Pg> for TweetStatus {
     }
 }
 
-#[derive(Identifiable, Queryable, AsChangeset)]
+#[derive(Debug, Clone, Identifiable, Queryable, AsChangeset, Serialize, Deserialize)]
 pub struct Hit {
     pub id: i32,
     pub status: HitStatus,
@@ -87,7 +88,7 @@ pub struct NewHit {
     pub hitlen: i32,
 }
 
-#[derive(Identifiable, Queryable, Associations, AsChangeset, Insertable)]
+#[derive(Debug, Clone, Identifiable, Queryable, Associations, AsChangeset, Insertable, Serialize, Deserialize)]
 #[belongs_to(Hit)]
 #[table_name = "tweets"]
 pub struct Tweet {
@@ -124,6 +125,7 @@ impl Tweet {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JoinedHit {
     pub hit: Hit,
     pub one: Tweet,
