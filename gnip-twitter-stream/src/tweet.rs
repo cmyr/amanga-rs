@@ -63,3 +63,34 @@ pub struct MinimalTweet {
     pub text: String,
     pub link: String,
 }
+
+impl MinimalTweet {
+    pub fn id(&self) -> u64 {
+        self.link.split('/').last().and_then(|s| s.parse::<u64>().ok())
+            .expect(&format!("failed to parse status {}", self.link))
+    }
+}
+
+impl From<Tweet> for MinimalTweet {
+    fn from(src: Tweet) -> MinimalTweet {
+        MinimalTweet {
+            text: src.text,
+            link: src.link,
+        }
+    }
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn tweet_id() {
+        let t = MinimalTweet {
+            text: "hello".into(),
+            link: "http://twitter.com/jas_leigh/statuses/899903730065264640".into(),
+        };
+        assert_eq!(t.id(), 899903730065264640);
+    }
+}
